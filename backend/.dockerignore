@@ -1,0 +1,14 @@
+**/bin
+**/obj
+**/TestResults
+.git
+**/.env
+**/.env.*
+**/appsettings.Development.json
+**/appsettings.Local.json
+**/secrets
+**/*.pem
+**/*.key
+BantuBantu.Tests
+README.md
+.DS_Store

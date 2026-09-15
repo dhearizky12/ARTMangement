@@ -1,0 +1,12 @@
+**/bin/
+**/obj/
+**/TestResults/
+**/appsettings.Development.json
+**/appsettings.Local.json
+**/.env
+**/.env.*
+!**/.env.example
+**/secrets/
+**/*.pem
+**/*.key
+.DS_Store

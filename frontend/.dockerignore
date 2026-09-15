@@ -1,0 +1,10 @@
+node_modules
+dist
+.git
+.env
+.env.*
+*.tsbuildinfo
+**/*.pem
+**/*.key
+README.md
+.DS_Store

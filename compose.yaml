@@ -1,0 +1,124 @@
+name: bantu-bantu
+
+x-api: &api
+  build:
+    context: ./backend
+    target: runtime
+  init: true
+  environment: &api-environment
+    ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+    ASPNETCORE_HTTP_PORTS: "8080"
+    Storage__RootPath: /app-data/documents
+    ConnectionStrings__Default: Host=db;Port=5432;Database=${POSTGRES_DB:-bantubantu};Username=${POSTGRES_USER:-bantubantu};Password=${POSTGRES_PASSWORD:-}
+    Google__ClientId: ${GOOGLE_CLIENT_ID:?Isi GOOGLE_CLIENT_ID di .env}
+    Jwt__PrivateKeyPath: /run/keys/private.pem
+    Jwt__PublicKeyPath: /run/keys/public.pem
+    Jwt__KeyId: ${JWT_KEY_ID:?Isi JWT_KEY_ID di .env}
+    Jwt__Issuer: ${JWT_ISSUER:?Isi JWT_ISSUER di .env}
+    Jwt__Audience: ${JWT_AUDIENCE:?Isi JWT_AUDIENCE di .env}
+    Jwt__AccessMinutes: ${JWT_ACCESS_MINUTES:-15}
+    Jwt__RefreshDays: ${JWT_REFRESH_DAYS:-7}
+    Frontend__Origin: ${FRONTEND_ORIGIN:?Isi FRONTEND_ORIGIN di .env}
+    Auth__CookieSecure: ${COOKIE_SECURE:-false}
+    Auth__CookieSameSite: ${COOKIE_SAME_SITE:-Lax}
+    AllowedHosts: ${ALLOWED_HOSTS:-localhost}
+  volumes:
+    - rsa_keys:/run/keys:ro
+    - document_data:/app-data/documents
+  depends_on:
+    db:
+      condition: service_healthy
+    wilayah-seed:
+      condition: service_completed_successfully
+    keys:
+      condition: service_completed_successfully
+    migrate:
+      condition: service_completed_successfully
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-bantubantu}
+      POSTGRES_USER: ${POSTGRES_USER:-bantubantu}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+      # Passwordless authentication for the local Docker database.
+      POSTGRES_HOST_AUTH_METHOD: ${POSTGRES_HOST_AUTH_METHOD:-trust}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+  keys:
+    build:
+      context: ./docker
+      dockerfile: keys.Dockerfile
+    environment:
+      KEY_OWNER_UID: "1654"
+    volumes:
+      - rsa_keys:/keys
+    restart: "no"
+
+  migrate:
+    build:
+      context: ./backend
+      target: migrations
+    environment:
+      ConnectionStrings__Default: Host=db;Port=5432;Database=${POSTGRES_DB:-bantubantu};Username=${POSTGRES_USER:-bantubantu};Password=${POSTGRES_PASSWORD:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  wilayah-seed:
+    build:
+      context: ./backend
+      dockerfile: scripts/seed.Dockerfile
+    environment:
+      PGHOST: db
+      PGDATABASE: ${POSTGRES_DB:-bantubantu}
+      PGUSER: ${POSTGRES_USER:-bantubantu}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
+  backend:
+    <<: *api
+    ports:
+      - "127.0.0.1:${API_PORT:-5080}:8080"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: ${API_BASE_URL:?Isi API_BASE_URL di .env}
+        VITE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?Isi GOOGLE_CLIENT_ID di .env}
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-5173}:8080"
+    depends_on:
+      backend:
+        condition: service_started
+    restart: unless-stopped
+
+  admin-seed:
+    <<: *api
+    profiles: ["tools"]
+    environment:
+      <<: *api-environment
+      AdminSeed__Email: ${ADMIN_EMAIL:-}
+      AdminSeed__Password: ${ADMIN_PASSWORD:-}
+    command: ["--seed-admin"]
+    restart: "no"
+
+volumes:
+  postgres_data:
+  document_data:
+  rsa_keys:
