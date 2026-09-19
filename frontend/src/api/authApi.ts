@@ -1,10 +1,11 @@
-export type Role = "User" | "Admin";
+export type Role = "Customer" | "PlatformAdmin" | "AgencyAdmin";
 export interface User {
   id: string;
   email: string;
   fullName: string;
   pictureUrl: string | null;
   role: Role;
+  agencyId?: string | null;
   profileCompleted: boolean;
   profileStep: "personal" | "address" | "documents" | "done";
 }
@@ -36,9 +37,10 @@ export class AuthApi {
     path: string,
     body?: unknown,
     token?: string,
+    method?: string,
   ): Promise<T> {
     const response = await fetch(`${this.baseUrl}${path}`, {
-      method: body === undefined ? "GET" : "POST",
+      method: method || (body === undefined ? "GET" : "POST"),
       credentials: "include",
       headers: {
         ...(body === undefined || body instanceof FormData
@@ -52,8 +54,6 @@ export class AuthApi {
     });
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
-      if (error.code === "PROFILE_INCOMPLETE" && typeof window !== "undefined")
-        window.dispatchEvent(new Event("profile-required"));
       const details = error.errors
         ? Object.values(error.errors).flat().join(" ")
         : null;
@@ -103,22 +103,48 @@ export class AuthApi {
         user: { ...this.session.user, ...user },
       });
   }
+  publicGet<T>(path: string): Promise<T> {
+    return this.request<T>(path);
+  }
+  async mutate<T>(
+    path: string,
+    method: "PUT" | "DELETE",
+    body?: unknown,
+  ): Promise<T> {
+    return this.authorized<T>(path, body, method);
+  }
+  async download(path: string): Promise<Blob> {
+    const session =
+      this.session && Date.parse(this.session.expiresAt) > Date.now() + 30000
+        ? this.session
+        : await this.refresh();
+    const response = await fetch(`${this.baseUrl}${path}`, {
+      headers: { Authorization: `Bearer ${session.accessToken}` },
+    });
+    if (!response.ok)
+      throw new ApiError(response.status, "Dokumen gagal diunduh.");
+    return response.blob();
+  }
   async get<T>(path: string): Promise<T> {
     return this.authorized<T>(path);
   }
   async post<T>(path: string, body: unknown): Promise<T> {
     return this.authorized<T>(path, body);
   }
-  private async authorized<T>(path: string, body?: unknown): Promise<T> {
+  private async authorized<T>(
+    path: string,
+    body?: unknown,
+    method?: string,
+  ): Promise<T> {
     let session = this.session;
     if (!session || Date.parse(session.expiresAt) <= Date.now() + 30000)
       session = await this.refresh();
     try {
-      return await this.request<T>(path, body, session.accessToken);
+      return await this.request<T>(path, body, session.accessToken, method);
     } catch (e) {
       if (!(e instanceof ApiError) || e.status !== 401) throw e;
       const updated = await this.refresh();
-      return this.request<T>(path, body, updated.accessToken);
+      return this.request<T>(path, body, updated.accessToken, method);
     }
   }
 }

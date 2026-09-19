@@ -3,7 +3,7 @@ import { AuthApi } from "./authApi";
 const session = {
   accessToken: "test-token",
   expiresAt: new Date(Date.now() + 600000).toISOString(),
-  user: { role: "User" },
+  user: { role: "Customer" },
 };
 afterEach(() => vi.unstubAllGlobals());
 describe("AuthApi", () => {
@@ -60,7 +60,9 @@ describe("AuthApi", () => {
     const body = new FormData();
     body.append("documentType", "KTP");
     body.append("file", new Blob(["test"], { type: "image/png" }), "test.png");
-    expect(await api.post("/api/profile/documents", body)).toEqual({
+    expect(
+      await api.post("/api/admin/providers/test-id/documents", body),
+    ).toEqual({
       profileStep: "done",
     });
     expect(fetch.mock.calls[1][1].headers).not.toHaveProperty("Content-Type");
@@ -69,26 +71,15 @@ describe("AuthApi", () => {
     );
     expect(fetch.mock.calls[1][1].body).toBe(body);
   });
-  it("preserves the server profile guard code without retrying a forbidden request", async () => {
-    const fetch = vi
-      .fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify(session)))
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            title: "Lengkapi profil",
-            code: "PROFILE_INCOMPLETE",
-          }),
-          { status: 403 },
-        ),
-      );
+  it("loads the public catalog without requesting a login or refresh", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify([])));
     vi.stubGlobal("fetch", fetch);
     const api = new AuthApi("https://api.example.test");
-    await api.refresh();
-    await expect(api.get("/api/service-categories")).rejects.toMatchObject({
-      status: 403,
-      code: "PROFILE_INCOMPLETE",
-    });
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(await api.publicGet("/api/providers")).toEqual([]);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0][0]).toBe(
+      "https://api.example.test/api/providers",
+    );
+    expect(fetch.mock.calls[0][1].headers).not.toHaveProperty("Authorization");
   });
 });

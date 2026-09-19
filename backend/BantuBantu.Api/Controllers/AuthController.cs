@@ -1,11 +1,9 @@
-using BantuBantu.Api.Filters;
 using BantuBantu.Application;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 namespace BantuBantu.Api.Controllers;
 
-[AllowIncompleteProfile]
 [ApiController, Route("api/auth"), EnableRateLimiting("auth")]
 public class AuthController(IAuthService auth, IConfiguration config) : ControllerBase
 {

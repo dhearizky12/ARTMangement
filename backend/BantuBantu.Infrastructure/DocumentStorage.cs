@@ -8,7 +8,7 @@ namespace BantuBantu.Infrastructure;
 public class DocumentProcessor : IDocumentProcessor
 {
     public const long MaxBytes = 5 * 1024 * 1024;
-    public UploadRules Rules => new(MaxBytes, ["image/jpeg", "image/png"], ["KTP", "Passport"]);
+    public UploadRules Rules => new(MaxBytes, ["image/jpeg", "image/png"], ["KTP", "KK"]);
     public async Task<Stream> ValidateAndNormalizeAsync(Stream file, long length, string contentType, CancellationToken ct)
     {
         if (length <= 0 || length > MaxBytes) throw new ProfileException("Ukuran dokumen harus antara 1 byte dan 5 MB.");
@@ -67,6 +67,13 @@ public class LocalFileStorage : IFileStorage
             return key;
         }
         catch { File.Delete(path); throw; }
+    }
+    public Task<Stream> OpenAsync(string storageKey, CancellationToken ct)
+    {
+        if (!storageKey.EndsWith(".jpg", StringComparison.Ordinal) || !Guid.TryParseExact(storageKey[..^4], "N", out _)) throw new ArgumentException("Invalid storage key.");
+        var path = Path.Combine(root, storageKey);
+        if (!File.Exists(path)) throw new ProfileException("Dokumen tidak ditemukan.", 404);
+        return Task.FromResult<Stream>(new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read));
     }
     public Task DeleteAsync(string storageKey, CancellationToken ct)
     {

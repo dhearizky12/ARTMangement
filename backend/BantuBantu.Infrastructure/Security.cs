@@ -32,11 +32,25 @@ public sealed class RsaKeys : IDisposable
     public RsaSecurityKey ValidationKey { get; }
     public RsaKeys(IConfiguration config)
     {
-        privateRsa.ImportFromPem(File.ReadAllText(config["Jwt:PrivateKeyPath"]!));
-        publicRsa.ImportFromPem(File.ReadAllText(config["Jwt:PublicKeyPath"]!));
+        privateRsa.ImportFromPem(ReadKey(config, "PrivateKey"));
+        publicRsa.ImportFromPem(ReadKey(config, "PublicKey"));
         if (privateRsa.KeySize < 2048 || !privateRsa.ExportSubjectPublicKeyInfo().SequenceEqual(publicRsa.ExportSubjectPublicKeyInfo())) throw new InvalidOperationException("RSA keys must match and have at least 2048 bits.");
         SigningKey = new(privateRsa) { KeyId = config["Jwt:KeyId"] };
         ValidationKey = new(publicRsa) { KeyId = config["Jwt:KeyId"] };
+    }
+    private static string ReadKey(IConfiguration config, string name)
+    {
+        var base64 = config[$"Jwt:{name}Base64"];
+        if (!string.IsNullOrWhiteSpace(base64))
+        {
+            try { return Encoding.UTF8.GetString(Convert.FromBase64String(base64)); }
+            catch (FormatException) { throw new InvalidOperationException($"Jwt:{name}Base64 must be valid base64 PEM."); }
+        }
+        var pem = config[$"Jwt:{name}"];
+        if (!string.IsNullOrWhiteSpace(pem)) return pem.Replace("\\n", "\n", StringComparison.Ordinal);
+        var path = config[$"Jwt:{name}Path"];
+        if (!string.IsNullOrWhiteSpace(path) && File.Exists(path)) return File.ReadAllText(path);
+        throw new InvalidOperationException($"Set Jwt:{name}Base64, Jwt:{name}, or Jwt:{name}Path.");
     }
     public void Dispose() { privateRsa.Dispose(); publicRsa.Dispose(); }
 }
@@ -47,6 +61,7 @@ public class TokenService(IConfiguration config, RsaKeys keys) : ITokenService
     {
         var now = DateTimeOffset.UtcNow; var expiry = now.AddMinutes(int.Parse(config["Jwt:AccessMinutes"]!));
         Claim[] claims = [new("sub", user.Id.ToString()), new("email", user.Email), new("role", user.Role.ToString()), new("profileCompleted", user.ProfileCompleted ? "true" : "false"), new("jti", Guid.NewGuid().ToString())];
+        if (user is AdminAccount { AgencyId: not null } admin) claims = [.. claims, new("agencyId", admin.AgencyId.Value.ToString())];
         var jwt = new JwtSecurityToken(config["Jwt:Issuer"], config["Jwt:Audience"], claims, now.UtcDateTime, expiry.UtcDateTime, new SigningCredentials(keys.SigningKey, SecurityAlgorithms.RsaSha256));
         return new(new JwtSecurityTokenHandler().WriteToken(jwt), expiry);
     }
@@ -55,9 +70,9 @@ public class TokenService(IConfiguration config, RsaKeys keys) : ITokenService
 }
 public class PasswordService : IPasswordService
 {
-    private readonly PasswordHasher<User> hasher = new();
+    private readonly PasswordHasher<AdminAccount> hasher = new();
     private readonly string dummy;
-    public PasswordService() { dummy = hasher.HashPassword(new User(), Convert.ToHexString(RandomNumberGenerator.GetBytes(32))); }
-    public string Hash(User user, string password) => hasher.HashPassword(user, password);
-    public bool Verify(User user, string password) => hasher.VerifyHashedPassword(user, user.PasswordHash ?? dummy, password) != PasswordVerificationResult.Failed && user.PasswordHash is not null;
+    public PasswordService() { dummy = hasher.HashPassword(new AdminAccount(), Convert.ToHexString(RandomNumberGenerator.GetBytes(32))); }
+    public string Hash(AdminAccount user, string password) => hasher.HashPassword(user, password);
+    public bool Verify(AdminAccount user, string password) => hasher.VerifyHashedPassword(user, string.IsNullOrEmpty(user.PasswordHash) ? dummy : user.PasswordHash, password) != PasswordVerificationResult.Failed && !string.IsNullOrEmpty(user.PasswordHash);
 }

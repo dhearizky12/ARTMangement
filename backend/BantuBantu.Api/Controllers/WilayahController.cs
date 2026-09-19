@@ -1,10 +1,10 @@
 using BantuBantu.Application;
-using BantuBantu.Api.Filters;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.ComponentModel.DataAnnotations;
 namespace BantuBantu.Api.Controllers;
-[ApiController, Route("api/wilayah"), Authorize, AllowIncompleteProfile]
+
+[ApiController, Route("api/wilayah"), AllowAnonymous]
 public class WilayahController(IWilayahRepository repository) : ControllerBase
 {
     [HttpGet("search")]

@@ -1,6 +1,10 @@
+# Pembaruan marketplace
+
+Arsitektur hybrid agency, role baru, browsing publik, dan wizard Provider kini menggantikan alur Customer lama. Panduan aktif: [MARKETPLACE.md](../docs/MARKETPLACE.md). Bagian dokumentasi lama di bawah mungkin masih menjelaskan alur sebelum migrasi.
+
 # Bantu-Bantu API
 
-.NET SDK 10, PostgreSQL 15+, OpenSSL. Jalankan seluruh perintah dari folder `backend`.
+.NET SDK 10, Neon/Lakebase Postgres, OpenSSL. Jalankan seluruh perintah dari folder `backend`.
 
 ## Struktur
 
@@ -8,7 +12,7 @@
 - Application: kontrak repository, DTO, dan AuthService.
 - Infrastructure: EF Core, repository, verifier Google, password hasher, RSA/JWT.
 - API: controllers, DI, validasi konfigurasi, CORS, rate limit, dan middleware.
-- Tests: integrasi HTTP dengan PostgreSQL nyata dan pemeriksaan token.
+- Tests: integrasi HTTP dengan PostgreSQL nyata, migrasi akun lama, scope agency, booking, review, dan pemeriksaan token.
 
 ## Konfigurasi lokal
 
@@ -27,19 +31,33 @@ Isi konfigurasi via `dotnet user-secrets set 'Key' 'value' --project BantuBantu.
 
 | Key user-secrets | Environment variable | Isi / contoh lokal |
 |---|---|---|
-| ConnectionStrings:Default | ConnectionStrings__Default | Connection string PostgreSQL milik Anda |
+| ConnectionStrings:Default | ConnectionStrings__Default | Pooled Neon `postgresql://...` URL untuk API |
+| — | DATABASE_URL | Pooled Neon connection URL (fallback di luar Compose) |
+| — | DATABASE_URL_UNPOOLED | Direct Neon URL untuk migrasi/seed (diprioritaskan EF CLI) |
 | Google:ClientId | Google__ClientId | Web Client ID dari Google Cloud |
+| Google:ClientSecret | Google__ClientSecret | Reserved untuk OAuth callback server; flow GIS saat ini tidak membacanya |
 | Jwt:PrivateKeyPath | Jwt__PrivateKeyPath | Path absolut `secrets/private.pem` |
 | Jwt:PublicKeyPath | Jwt__PublicKeyPath | Path absolut `secrets/public.pem` |
+| Jwt:PrivateKeyBase64 | Jwt__PrivateKeyBase64 | Base64 dari PEM private key; gunakan ini pada Render |
+| Jwt:PublicKeyBase64 | Jwt__PublicKeyBase64 | Base64 dari PEM public key; gunakan ini pada Render |
 | Jwt:KeyId | Jwt__KeyId | Identitas key, misalnya `local-v1` |
 | Jwt:Issuer | Jwt__Issuer | Misalnya `http://localhost:5080` |
 | Jwt:Audience | Jwt__Audience | Misalnya `bantu-bantu-web` |
 | Jwt:AccessMinutes | Jwt__AccessMinutes | `15` |
 | Jwt:RefreshDays | Jwt__RefreshDays | `7` |
 | Frontend:Origin | Frontend__Origin | `http://localhost:5173` tanpa trailing slash |
+| Frontend:Origins | Frontend__Origins | Origin tambahan exact, dipisahkan koma/semicolon |
+| Frontend:OriginPatterns | Frontend__OriginPatterns | Preview HTTPS pattern, misalnya `https://*.pages.dev` |
 | Auth:CookieSecure | Auth__CookieSecure | `false` hanya Development HTTP; `true` di production |
 | Auth:CookieSameSite | Auth__CookieSameSite | `Lax` untuk localhost/same-site; `None` + Secure untuk cross-site |
 | Storage:RootPath | Storage__RootPath | Path absolut direktori privat dokumen, di luar web root |
+| Storage:Provider | Storage__Provider | `Local` untuk development atau `S3` untuk Cloudflare R2 |
+| Storage:S3:ServiceUrl | Storage__S3__ServiceUrl | Endpoint R2 S3 API (`https://<account>.r2.cloudflarestorage.com`) |
+| Storage:S3:Region | Storage__S3__Region | Region S3, biasanya `auto` untuk R2 |
+| Storage:S3:AccessKey | Storage__S3__AccessKey | R2 API token access key |
+| Storage:S3:SecretKey | Storage__S3__SecretKey | R2 API token secret key |
+| Storage:S3:Bucket | Storage__S3__Bucket | Nama bucket R2 privat |
+| Storage:S3:KeyPrefix | Storage__S3__KeyPrefix | Prefix object, misalnya `provider-documents` |
 | AllowedHosts | AllowedHosts | Host API yang diizinkan; misalnya `localhost` |
 | — | ASPNETCORE_ENVIRONMENT | `Development` untuk membaca user-secrets |
 | — | ASPNETCORE_URLS | Misalnya `http://localhost:5080` |
@@ -48,15 +66,20 @@ Isi konfigurasi via `dotnet user-secrets set 'Key' 'value' --project BantuBantu.
 
 Template key kosong: `BantuBantu.Api/appsettings.Example.json`. File ini tidak otomatis dimuat. Alternatif lokal: salin menjadi `appsettings.Development.json` yang sudah diabaikan git. Jangan gunakan `VITE_` untuk secret; nilai tersebut terlihat di browser.
 
+`RsaKeys` menerima key sebagai path file PEM, raw PEM, atau base64 PEM. Gunakan `Jwt__PrivateKeyBase64` dan `Jwt__PublicKeyBase64` pada Render karena filesystem container bersifat ephemeral; key harus merupakan pasangan yang sama dan minimal 2048 bit.
+
 ## Database dan migrasi
 
-Buat database PostgreSQL kosong menggunakan akun/database milik proyek ini. EF CLI menggunakan `ConnectionStrings__Default`, agar pembuatan migrasi tidak membutuhkan konfigurasi Google/RSA.
+Neon menyediakan dua URL untuk branch yang sama. Gunakan URL pooled (`DATABASE_URL`) untuk API dan URL direct/unpooled (`DATABASE_URL_UNPOOLED`) untuk EF migrations. `DatabaseConnectionStringResolver` mengubah URI `postgres://`/`postgresql://` menjadi format Npgsql dan mempertahankan `sslmode=require`. Lihat [panduan Neon](../docs/NEON.md).
 
 ```sh
 # Isi connection string lewat environment lokal/secret manager.
-export ConnectionStrings__Default='Host=YOUR_HOST;Database=YOUR_DB;Username=YOUR_USER;Password=YOUR_PASSWORD'
+export DATABASE_URL='postgresql://USER:PASSWORD@ep-example-pooler.REGION.aws.neon.tech/DB?sslmode=require&channel_binding=require'
+export DATABASE_URL_UNPOOLED='postgresql://USER:PASSWORD@ep-example.REGION.aws.neon.tech/DB?sslmode=require&channel_binding=require'
 dotnet ef database update --project BantuBantu.Infrastructure --startup-project BantuBantu.Api
 ```
+
+Migrations memakai direct URL karena koneksi pooled Neon berjalan melalui PgBouncer dan tidak cocok untuk operasi yang membutuhkan session state. Untuk branch production, uji migration di branch terpisah terlebih dahulu bila tersedia.
 
 Migrasi `InitialAuth`, `FixUserProfileRelationship`, dan `ProfileWizardAndServiceCategories` disertakan. Jangan gunakan `EnsureCreated`. Untuk perubahan entity berikutnya:
 
@@ -119,6 +142,6 @@ Tes integrasi mencakup login admin, password salah, JWT RS256, audience/issuer s
 
 ## Docker
 
-Dockerfile tersedia di folder ini. Untuk menjalankan frontend, API, dan PostgreSQL bersama, lihat [panduan Docker Compose](../docs/DOCKER.md).
+Dockerfile tersedia di folder ini. Untuk menjalankan frontend dan API dengan Neon, lihat [panduan Docker Compose](../docs/DOCKER.md).
 
-Referensi wilayah dan langkah pembaruan/seed: lihat [WILAYAH.md](../docs/WILAYAH.md). Docker menjalankan seed otomatis sebelum API.
+Referensi wilayah dan langkah pembaruan/seed: lihat [WILAYAH.md](../docs/WILAYAH.md). Docker menyediakan seed sebagai job eksplisit profile `tools`.

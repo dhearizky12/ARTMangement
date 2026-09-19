@@ -8,5 +8,5 @@ export interface ServiceCategory {
   isFeatured: boolean;
 }
 export const categoryApi = {
-  list: () => authApi.get<ServiceCategory[]>("/api/service-categories"),
+  list: () => authApi.publicGet<ServiceCategory[]>("/api/service-categories"),
 };

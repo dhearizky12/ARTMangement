@@ -9,9 +9,15 @@
 **/appsettings.Local.json
 **/secrets/
 **/*.pem
+
+
 **/*.key
 .DS_Store
 **/*.tsbuildinfo
 **/TestResults/
-docs
-**/.config
+**/.config/
+frontend/test-results/
+frontend/playwright-report/
+.neon
+node_modules/
+docs/

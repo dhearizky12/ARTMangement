@@ -1,67 +1,46 @@
-import { LogOut, ShieldCheck } from "lucide-react";
-import { useState } from "react";
-import { authApi } from "../api/authApi";
+import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { useProfile } from "../routes/ProfileBoundary";
+import { authApi } from "../api/authApi";
 import { AppShell } from "../components/AppShell";
-import { Badge, Button, Card } from "../components/ui";
+import { Card, Button } from "../components/ui";
+import { useState } from "react";
 export function AccountPage() {
   const { session } = useAuth();
-  const { status } = useProfile();
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
   return (
     <AppShell>
-      <p className="eyebrow">RUANG PRIBADIMU</p>
-      <h1>Profil saya.</h1>
-      <Card className="account-card">
-        <Badge tone="success">Profil lengkap</Badge>
-        <h2>{session!.user.fullName}</h2>
-        <p>{session!.user.email}</p>
-        <dl>
-          <dt>Nomor HP</dt>
-          <dd>{status.personalInfo?.phoneNumber || "—"}</dd>
-          <dt>Alamat</dt>
-          <dd>
-            {status.address
-              ? `${status.address.addressLine}, ${status.address.villageName ? status.address.villageName + ", " : ""}${status.address.district}, ${status.address.city}, ${status.address.province} ${status.address.postalCode}`
-              : "—"}
-          </dd>
-          <dt>Dokumen identitas</dt>
-          <dd>
-            {status.document?.documentType || "—"} ·{" "}
-            {status.document?.verificationStatus === "Pending"
-              ? "Menunggu pemeriksaan"
-              : status.document?.verificationStatus || "—"}
-          </dd>
-        </dl>
-        <p className="privacy-note">
-          <ShieldCheck aria-hidden="true" /> Dokumen disimpan privat. Profil
-          lengkap tidak berarti identitas sudah terverifikasi.
-        </p>
+      <h1>Akun saya</h1>
+      <Card>
+        {session ? (
+          <>
+            <h2>{session.user.fullName}</h2>
+            <p>{session.user.email}</p>
+            <p>{session.user.role}</p>
+            {session.user.role !== "Customer" && (
+              <Link className="text-link" to="/admin">
+                Buka ruang kelola
+              </Link>
+            )}
+            <Button
+              variant="secondary"
+              onClick={() => authApi.logout().catch((e) => setError(e.message))}
+            >
+              Keluar
+            </Button>
+            {error && <p role="alert">{error}</p>}
+          </>
+        ) : (
+          <>
+            <p>Masuk saat Anda siap memesan bantuan.</p>
+            <Link className="btn btn-primary" to="/login?returnTo=%2Faccount">
+              Masuk dengan Google
+            </Link>
+            <Link className="text-link" to="/admin/login">
+              Login admin
+            </Link>
+          </>
+        )}
       </Card>
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
-      <Button
-        variant="ghost"
-        disabled={busy}
-        onClick={async () => {
-          setBusy(true);
-          try {
-            await authApi.logout();
-          } catch {
-            setError("Gagal keluar. Coba lagi.");
-          } finally {
-            setBusy(false);
-          }
-        }}
-      >
-        <LogOut aria-hidden="true" />
-        {busy ? "Keluar…" : "Keluar dari akun"}
-      </Button>
     </AppShell>
   );
 }

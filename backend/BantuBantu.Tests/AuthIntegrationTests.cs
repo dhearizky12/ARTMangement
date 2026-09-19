@@ -11,6 +11,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.IdentityModel.Tokens;
 namespace BantuBantu.Tests;
 
@@ -23,11 +25,18 @@ public partial class AuthIntegrationTests
         using (var scope = factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            await db.Database.MigrateAsync();
-            Assert.DoesNotContain(db.Model.FindEntityType(typeof(UserProfile))!.GetProperties(), p => p.IsShadowProperty());
-            var user = new User { Email = "admin@example.test", FullName = "Test admin", Role = UserRole.Admin, ProfileCompleted = true };
+            // Exercise a real upgrade, including existing admin credentials and legacy role values.
+            var migrator = db.Database.GetService<IMigrator>();
+            await migrator.MigrateAsync("20260909220343_IndonesiaReferenceRegions");
+            var user = new AdminAccount { Email = "admin@example.test", FullName = "Test admin", Role = UserRole.PlatformAdmin };
             user.PasswordHash = scope.ServiceProvider.GetRequiredService<IPasswordService>().Hash(user, "Test-password-long-42!");
-            db.Users.Add(user); await db.SaveChangesAsync();
+            await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO \"Users\" (\"Id\",\"Email\",\"FullName\",\"Role\",\"ProfileCompleted\",\"ProfileStep\",\"CreatedAt\",\"PasswordHash\") VALUES ({user.Id},{user.Email},{user.FullName},'Admin',TRUE,'done',{DateTimeOffset.UtcNow},{user.PasswordHash})");
+            await migrator.MigrateAsync();
+            var migrated = await db.AdminAccounts.SingleAsync();
+            Assert.Equal(user.Id, migrated.Id);
+            Assert.Equal(user.PasswordHash, migrated.PasswordHash);
+            Assert.Equal(UserRole.PlatformAdmin, migrated.Role);
+
         }
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
         client.DefaultRequestHeaders.Add("Origin", AuthFactory.Origin);
@@ -37,7 +46,7 @@ public partial class AuthIntegrationTests
         login.EnsureSuccessStatusCode();
         var admin = (await login.Content.ReadFromJsonAsync<AuthResponse>())!;
         var jwt = new JwtSecurityTokenHandler().ReadJwtToken(admin.AccessToken);
-        Assert.Equal("RS256", jwt.Header.Alg); Assert.Equal("Admin", admin.User.Role);
+        Assert.Equal("RS256", jwt.Header.Alg); Assert.Equal("PlatformAdmin", admin.User.Role);
         using var rsa = RSA.Create(); rsa.ImportFromPem(File.ReadAllText(factory.PublicPath));
         var parameters = new TokenValidationParameters { IssuerSigningKey = new RsaSecurityKey(rsa), ValidateIssuerSigningKey = true, ValidIssuer = "test-issuer", ValidAudience = "test-audience", ValidateLifetime = true, ValidAlgorithms = ["RS256"] };
         new JwtSecurityTokenHandler().ValidateToken(admin.AccessToken, parameters, out _);
@@ -76,9 +85,9 @@ public partial class AuthIntegrationTests
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.PostAsJsonAsync("/api/auth/google", new { credential = "invalid" })).StatusCode);
         var google = await client.PostAsJsonAsync("/api/auth/google", new { credential = "verified-test-identity" }); google.EnsureSuccessStatusCode();
         var userSession = (await google.Content.ReadFromJsonAsync<AuthResponse>())!;
-        Assert.Equal("User", userSession.User.Role); Assert.False(userSession.User.ProfileCompleted);
+        Assert.Equal("Customer", userSession.User.Role); Assert.True(userSession.User.ProfileCompleted);
         client.DefaultRequestHeaders.Authorization = new("Bearer", userSession.AccessToken);
-        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/user/dashboard")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/user/dashboard")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/admin/dashboard")).StatusCode);
         var again = await client.PostAsJsonAsync("/api/auth/google", new { credential = "verified-test-identity" });
         Assert.Equal(userSession.User.Id, (await again.Content.ReadFromJsonAsync<AuthResponse>())!.User.Id);
@@ -90,7 +99,7 @@ public partial class AuthIntegrationTests
             Assert.Equal(2, await db.Users.CountAsync());
             Assert.All(await db.RefreshSessions.ToListAsync(), s => Assert.Equal(64, s.TokenHash.Length));
         }
-        await ProfileLifecycle(client, factory, userSession, admin.AccessToken);
+        await MarketplaceLifecycle(client, factory, userSession, admin.AccessToken);
     }
     [Fact]
     public async Task RealGoogleVerifierRejectsForgedToken()

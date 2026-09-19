@@ -2,6 +2,7 @@ using BantuBantu.Application;
 using BantuBantu.Domain;
 using Microsoft.EntityFrameworkCore;
 namespace BantuBantu.Infrastructure;
+
 public class WilayahRepository(AppDbContext db) : IWilayahRepository
 {
     private IQueryable<Village> Query() => db.Villages.AsNoTracking().Include(v => v.District).ThenInclude(d => d.Regency).ThenInclude(r => r.Province);

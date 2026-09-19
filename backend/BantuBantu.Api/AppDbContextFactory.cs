@@ -6,7 +6,10 @@ public class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbContext>
 {
     public AppDbContext CreateDbContext(string[] args)
     {
-        var connection = Environment.GetEnvironmentVariable("ConnectionStrings__Default") ?? throw new InvalidOperationException("Set ConnectionStrings__Default for EF commands.");
+        var configuration = new ConfigurationBuilder()
+            .AddEnvironmentVariables()
+            .Build();
+        var connection = new DatabaseConnectionStringResolver().Resolve(configuration, preferUnpooled: true);
         return new(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(connection).Options);
     }
 }

@@ -1,6 +1,10 @@
+# Pembaruan marketplace
+
+Arsitektur hybrid agency, role baru, browsing publik, dan wizard Provider kini menggantikan alur Customer lama. Panduan aktif: [MARKETPLACE.md](../docs/MARKETPLACE.md). Bagian dokumentasi lama di bawah mungkin masih menjelaskan alur sebelum migrasi.
+
 # Bantu-Bantu frontend
 
-React + TypeScript + Vite. Node.js 22.12+ atau 24. Dependency dan build berdiri sendiri dari backend.
+React + TypeScript + Vite. Node.js 22.12+ atau 24. Dependency dan build berdiri sendiri dari backend. Halaman publik dapat dibuka tanpa login; area admin dan aksi booking memakai guard yang sesuai role.
 
 ```sh
 npm ci
@@ -17,17 +21,16 @@ Konfigurasikan OAuth consent screen di Google Cloud, buat OAuth client tipe Web 
 
 Frontend menyimpan access token hanya di memori; fetch memakai `credentials: include`. Refresh pada startup, sebelum expiry, dan setelah HTTP 401. Request refresh bersamaan dalam satu tab digabung menjadi satu promise. Kegagalan refresh menghapus sesi. Tidak ada JWT/refresh token di localStorage/sessionStorage. Guard route mengikuti role dari respons server; backend tetap menjadi sumber otorisasi yang sebenarnya.
 
-## Demo tahap 1–6
+## Demo marketplace
 
-1. Jalankan migrasi, seed admin, API, dan frontend.
-2. `/login` → klik Google → pilih akun penguji → pengguna baru masuk wizard. Selesaikan personal, alamat, dan upload JPG/PNG untuk masuk homepage yang terlindungi.
-3. Periksa Network: POST Google mengembalikan access token; refresh token hanya muncul sebagai Set-Cookie httpOnly. Decode header JWT untuk melihat `alg: RS256`; public key tersedia di JWKS API.
-4. Reload halaman: sesi dipulihkan via refresh cookie tanpa login Google lagi.
-5. Keluar → `/admin/login` → masukkan akun hasil seed → dashboard admin.
-6. Buka route berbeda role: frontend mengarahkan kembali; request API langsung dengan token berbeda role menghasilkan 403. Tanpa token menghasilkan 401.
-7. Logout mencabut refresh; refresh berikutnya menghasilkan 401.
+1. Jalankan migrasi, seed wilayah, API, dan frontend.
+2. Guest dapat membuka `/`, `/search`, `/providers/:id`, dan `/trust`; kategori, provider, rating, harga, dan konten berasal dari API.
+3. Klik `Masuk & Pesan` dari detail provider. Setelah Google login, Customer kembali ke detail lalu mengisi tanggal serta lokasi layanan.
+4. `/admin/login` membuka area admin. Platform Admin membuat agency/provider; Agency Admin hanya melihat roster agency yang ada di claim `agencyId`.
+5. `/admin/providers/:id` menjalankan personal, alamat, KTP/KK, layanan, dan checklist verifikasi. Status tahap disimpan server dan aman saat reload.
+6. Refresh token hanya muncul sebagai cookie httpOnly; JWT memakai RS256 dan public key tersedia di JWKS API.
 
-Pengguna dengan `profileCompleted=false` diarahkan ke wizard sesuai `GET /api/profile/status`. Setiap submit berhasil diikuti GET status, sehingga reload melanjutkan tahap terakhir. User yang sudah lengkap diarahkan ke homepage. Bottom navigation membuka Beranda, Layanan, dan Akun; kategori dan layanan pilihan diambil dari `/api/service-categories`.
+Bottom navigation membuka Beranda, Cari, Pesanan, dan Akun. Customer tidak memiliki wizard onboarding wajib; alamat layanan tersimpan pada Order.
 
 ## Build dan test
 
@@ -40,7 +43,7 @@ Deploy folder `dist` ke static host dengan SPA fallback ke `index.html`. Variabe
 
 ## Docker
 
-Dockerfile tersedia di folder ini. Untuk menjalankan frontend, API, dan PostgreSQL bersama, lihat [panduan Docker Compose](../docs/DOCKER.md).
+Dockerfile tersedia di folder ini. Untuk menjalankan frontend, API, dan Neon bersama, lihat [panduan Docker Compose](../docs/DOCKER.md).
 
 ## Design system
 
