@@ -11,7 +11,7 @@ npm ci
 cp .env.example .env
 ```
 
-Isi `VITE_API_BASE_URL` dengan origin API (contoh lokal `http://localhost:5080`) dan `VITE_GOOGLE_CLIENT_ID` dengan Web Client ID yang sama dengan `Google:ClientId` di backend. Lalu:
+Isi `VITE_API_BASE_URL` dengan origin API (lokal `http://localhost:5080`, production `https://bantu-bantu-proxy.novaldyhidayat.workers.dev`) dan `VITE_GOOGLE_CLIENT_ID` dengan Web Client ID yang sama dengan `Google:ClientId` di backend. Worker Cloudflare meneruskan request HTTPS frontend ke backend HTTP MonsterASP.NET.
 
 ```sh
 npm run dev -- --host localhost --port 5173 --strictPort
