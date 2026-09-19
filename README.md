@@ -13,6 +13,6 @@ Marketplace penyedia jasa dengan React + TypeScript dan ASP.NET Core 10 + EF Cor
 - Kategori jasa, provider, konten trust, pesanan, dan ulasan berasal dari API/database.
 - UI neo-brutalism mobile-first dengan tokens, komponen reusable, dan bottom navigation.
 
-Jalankan dengan [Docker Compose](docs/DOCKER.md), atau ikuti [backend](backend/README.md) dan [frontend](frontend/README.md). Untuk deployment API ke Render dengan Cloudflare R2, ikuti [panduan Render](docs/RENDER.md). Setelah memperbarui source, `docker compose up --build -d` menerapkan migrasi ke branch Neon yang dikonfigurasi dan memasang volume dokumen privat.
+Jalankan dengan [Docker Compose](docs/DOCKER.md), atau ikuti [backend](backend/README.md) dan [frontend](frontend/README.md). Untuk deployment API ke Render dengan Cloudflare R2, ikuti [panduan Render](docs/RENDER.md). Untuk hosting IIS di MonsterASP.NET, ikuti [runbook MonsterASP.NET](docs/MONSTERASP.NET.md) dan template [`web.config`](deploy/monsteraspnet/web.config.template). Setelah memperbarui source, `docker compose up --build -d` menerapkan migrasi ke branch Neon yang dikonfigurasi dan memasang volume dokumen privat.
 
 Lihat [panduan marketplace](docs/MARKETPLACE.md) untuk model domain, scope agency, endpoint, migrasi, seeding wilayah, dan QA.

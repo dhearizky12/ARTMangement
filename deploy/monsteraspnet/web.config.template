@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <system.webServer>
+    <handlers>
+      <add name="aspNetCore" path="*" verb="*" modules="AspNetCoreModuleV2" resourceType="Unspecified" />
+    </handlers>
+    <aspNetCore processPath="dotnet"
+                arguments=".\BantuBantu.Api.dll"
+                hostingModel="inprocess"
+                stdoutLogEnabled="false">
+      <!--
+        This file is a deployment template. It intentionally contains no
+        secret values. If MonsterASP.NET does not provide an App Settings
+        panel, copy it to the server as web.config and fill these values
+        there. Never commit the filled file.
+      -->
+      <environmentVariables>
+        <environmentVariable name="ASPNETCORE_ENVIRONMENT" value="Production" />
+        <environmentVariable name="DATABASE_URL" value="" />
+
+        <environmentVariable name="Jwt__PrivateKeyBase64" value="" />
+        <environmentVariable name="Jwt__PublicKeyBase64" value="" />
+        <environmentVariable name="Jwt__KeyId" value="" />
+        <environmentVariable name="Jwt__Issuer" value="" />
+        <environmentVariable name="Jwt__Audience" value="" />
+        <environmentVariable name="Jwt__AccessMinutes" value="15" />
+        <environmentVariable name="Jwt__RefreshDays" value="30" />
+
+        <environmentVariable name="Google__ClientId" value="" />
+        <environmentVariable name="Google__ClientSecret" value="" />
+
+        <environmentVariable name="Frontend__Origin" value="" />
+        <environmentVariable name="Frontend__Origins" value="" />
+        <environmentVariable name="Frontend__OriginPatterns" value="" />
+        <environmentVariable name="AllowedHosts" value="" />
+
+        <environmentVariable name="Auth__CookieSecure" value="true" />
+        <environmentVariable name="Auth__CookieSameSite" value="None" />
+
+        <environmentVariable name="Storage__Provider" value="S3" />
+        <environmentVariable name="Storage__S3__ServiceUrl" value="" />
+        <environmentVariable name="Storage__S3__Region" value="auto" />
+        <environmentVariable name="Storage__S3__AccessKey" value="" />
+        <environmentVariable name="Storage__S3__SecretKey" value="" />
+        <environmentVariable name="Storage__S3__Bucket" value="" />
+        <environmentVariable name="Storage__S3__KeyPrefix" value="provider-documents" />
+      </environmentVariables>
+    </aspNetCore>
+  </system.webServer>
+</configuration>
