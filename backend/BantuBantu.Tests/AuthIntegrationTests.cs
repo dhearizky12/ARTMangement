@@ -38,7 +38,7 @@ public partial class AuthIntegrationTests
             Assert.Equal(UserRole.PlatformAdmin, migrated.Role);
 
         }
-        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
+        using var client = factory.CreateClient();
         client.DefaultRequestHeaders.Add("Origin", AuthFactory.Origin);
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/admin/dashboard")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.PostAsJsonAsync("/api/auth/admin/login", new { email = "admin@example.test", password = "wrong" })).StatusCode);
@@ -54,8 +54,8 @@ public partial class AuthIntegrationTests
         Assert.Throws<SecurityTokenInvalidAudienceException>(() => new JwtSecurityTokenHandler().ValidateToken(admin.AccessToken, wrongAudience, out _));
         var wrongIssuer = parameters.Clone(); wrongIssuer.ValidIssuer = "wrong";
         Assert.Throws<SecurityTokenInvalidIssuerException>(() => new JwtSecurityTokenHandler().ValidateToken(admin.AccessToken, wrongIssuer, out _));
-        var cookie = login.Headers.GetValues("Set-Cookie").Single(); Assert.Contains("httponly", cookie.ToLowerInvariant());
-        var refreshCookie = cookie.Split(';')[0];
+        Assert.False(string.IsNullOrWhiteSpace(admin.RefreshToken));
+        Assert.DoesNotContain(login.Headers, x => x.Key.Equals("Set-Cookie", StringComparison.OrdinalIgnoreCase));
         client.DefaultRequestHeaders.Authorization = new("Bearer", admin.AccessToken);
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/admin/dashboard")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/user/dashboard")).StatusCode);
@@ -70,18 +70,12 @@ public partial class AuthIntegrationTests
         }
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/.well-known/jwks.json")).StatusCode);
         client.DefaultRequestHeaders.Authorization = null;
-        client.DefaultRequestHeaders.Add("Cookie", refreshCookie);
-        var refresh = await client.PostAsJsonAsync("/api/auth/refresh", new { }); refresh.EnsureSuccessStatusCode();
-        var newCookie = refresh.Headers.GetValues("Set-Cookie").Single().Split(';')[0];
-        Assert.NotEqual(refreshCookie, newCookie);
-        Assert.Equal(HttpStatusCode.Unauthorized, (await client.PostAsJsonAsync("/api/auth/refresh", new { })).StatusCode);
-        client.DefaultRequestHeaders.Remove("Cookie"); client.DefaultRequestHeaders.Add("Cookie", newCookie);
-        client.DefaultRequestHeaders.Remove("Origin"); client.DefaultRequestHeaders.Add("Origin", "https://attacker.test");
-        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/auth/refresh", new { })).StatusCode);
-        client.DefaultRequestHeaders.Remove("Origin"); client.DefaultRequestHeaders.Add("Origin", AuthFactory.Origin);
-        Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsJsonAsync("/api/auth/logout", new { })).StatusCode);
-        Assert.Equal(HttpStatusCode.Unauthorized, (await client.PostAsJsonAsync("/api/auth/refresh", new { })).StatusCode);
-        client.DefaultRequestHeaders.Remove("Cookie");
+        var refresh = await client.PostAsJsonAsync("/api/auth/refresh", new { refreshToken = admin.RefreshToken }); refresh.EnsureSuccessStatusCode();
+        var refreshed = (await refresh.Content.ReadFromJsonAsync<AuthResponse>())!;
+        Assert.NotEqual(admin.RefreshToken, refreshed.RefreshToken);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.PostAsJsonAsync("/api/auth/refresh", new { refreshToken = admin.RefreshToken })).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsJsonAsync("/api/auth/logout", new { refreshToken = refreshed.RefreshToken })).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.PostAsJsonAsync("/api/auth/refresh", new { refreshToken = refreshed.RefreshToken })).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.PostAsJsonAsync("/api/auth/google", new { credential = "invalid" })).StatusCode);
         var google = await client.PostAsJsonAsync("/api/auth/google", new { credential = "verified-test-identity" }); google.EnsureSuccessStatusCode();
         var userSession = (await google.Content.ReadFromJsonAsync<AuthResponse>())!;
@@ -124,7 +118,7 @@ public sealed class AuthFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
-        var config = new Dictionary<string, string?> { ["ConnectionStrings:Default"] = connection, ["Storage:RootPath"] = Path.Combine(directory, "documents"), ["Google:ClientId"] = "test.apps.googleusercontent.com", ["Jwt:PrivateKeyPath"] = Path.Combine(directory, "private.pem"), ["Jwt:PublicKeyPath"] = PublicPath, ["Jwt:KeyId"] = "test-key", ["Jwt:Issuer"] = "test-issuer", ["Jwt:Audience"] = "test-audience", ["Jwt:AccessMinutes"] = "15", ["Jwt:RefreshDays"] = "7", ["Frontend:Origin"] = Origin, ["Auth:CookieSecure"] = "false", ["Auth:CookieSameSite"] = "Lax" };
+        var config = new Dictionary<string, string?> { ["ConnectionStrings:Default"] = connection, ["Storage:RootPath"] = Path.Combine(directory, "documents"), ["Google:ClientId"] = "test.apps.googleusercontent.com", ["Jwt:PrivateKeyPath"] = Path.Combine(directory, "private.pem"), ["Jwt:PublicKeyPath"] = PublicPath, ["Jwt:KeyId"] = "test-key", ["Jwt:Issuer"] = "test-issuer", ["Jwt:Audience"] = "test-audience", ["Jwt:AccessMinutes"] = "15", ["Jwt:RefreshDays"] = "7", ["Frontend:Origin"] = Origin };
         foreach (var entry in config) builder.UseSetting(entry.Key, entry.Value);
         builder.ConfigureServices(services => { services.RemoveAll<IGoogleIdentityVerifier>(); services.AddSingleton<IGoogleIdentityVerifier, FakeGoogleVerifier>(); });
     }

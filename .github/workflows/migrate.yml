@@ -1,0 +1,36 @@
+name: Apply database migrations
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    name: Migrate Neon production database
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+      ConnectionStrings__Default: ${{ secrets.DATABASE_URL_UNPOOLED }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install EF Core CLI
+        run: |
+          dotnet tool install --global dotnet-ef --version "10.*"
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+
+      - name: Apply migrations with the direct Neon URL
+        run: |
+          test -n "$DATABASE_URL_UNPOOLED"
+          dotnet ef database update \
+            --project backend/BantuBantu.Infrastructure \
+            --startup-project backend/BantuBantu.Api

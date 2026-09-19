@@ -47,9 +47,7 @@ Isi konfigurasi via `dotnet user-secrets set 'Key' 'value' --project BantuBantu.
 | Jwt:RefreshDays | Jwt__RefreshDays | `7` |
 | Frontend:Origin | Frontend__Origin | `http://localhost:5173` tanpa trailing slash |
 | Frontend:Origins | Frontend__Origins | Origin tambahan exact, dipisahkan koma/semicolon |
-| Frontend:OriginPatterns | Frontend__OriginPatterns | Preview HTTPS pattern, misalnya `https://*.pages.dev` |
-| Auth:CookieSecure | Auth__CookieSecure | `false` hanya Development HTTP; `true` di production |
-| Auth:CookieSameSite | Auth__CookieSameSite | `Lax` untuk localhost/same-site; `None` + Secure untuk cross-site |
+| Frontend:OriginPatterns | Frontend__OriginPatterns | Kosong untuk Firebase production; isi hanya jika preview channels dipakai |
 | Storage:RootPath | Storage__RootPath | Path absolut direktori privat dokumen, di luar web root |
 | Storage:Provider | Storage__Provider | `Local` untuk development atau `S3` untuk Cloudflare R2 |
 | Storage:S3:ServiceUrl | Storage__S3__ServiceUrl | Endpoint R2 S3 API (`https://<account>.r2.cloudflarestorage.com`) |
@@ -103,27 +101,27 @@ Seed adalah perintah eksplisit sekali jalan, bukan endpoint publik atau seed oto
 
 ## REST API
 
-Semua POST `/api/auth/*` wajib membawa `Origin` yang persis sama dengan `Frontend:Origin`, termasuk curl/Postman. Ini melindungi login/refresh/logout dari CSRF. Browser mengirim header Origin otomatis. Semua route autentikasi dibatasi 20 request/menit per alamat IP. Untuk reverse proxy, konfigurasikan trusted proxy dan forwarded headers secara eksplisit sebelum memakai IP klien sebagai partition.
+Semua route autentikasi dibatasi 20 request/menit per alamat IP. Akses API memakai header `Authorization: Bearer <accessToken>`; refresh token dikirim di body JSON dan hanya disimpan di memori frontend. Untuk reverse proxy, konfigurasikan trusted proxy dan forwarded headers secara eksplisit sebelum memakai IP klien sebagai partition.
 
 | Method | Path | Body / akses |
 |---|---|---|
 | POST | `/api/auth/google` | `{ "credential": "GOOGLE_ID_TOKEN" }` |
 | POST | `/api/auth/admin/login` | `{ "email": "...", "password": "..." }` |
-| POST | `/api/auth/refresh` | `{}` + cookie refresh |
-| POST | `/api/auth/logout` | `{}` + cookie refresh |
+| POST | `/api/auth/refresh` | `{ "refreshToken": "..." }` |
+| POST | `/api/auth/logout` | `{ "refreshToken": "..." }` |
 | GET | `/api/auth/me` | Bearer access token |
 | GET | `/api/user/dashboard` | Role User + profil lengkap |
 | GET | `/api/admin/dashboard` | Role Admin |
 | GET | `/.well-known/jwks.json` | Public RSA key saja |
 | GET | `/health` | Liveness, tidak memeriksa koneksi database |
 
-Respons login/refresh: `{ accessToken, expiresAt, user: { id, email, fullName, pictureUrl, role, profileCompleted, profileStep } }`. Refresh token hanya di cookie httpOnly, path `/api/auth`. Database menyimpan SHA-256 hash; refresh lama ditolak setelah dipakai. Konsumsi refresh memakai update atomik PostgreSQL sehingga satu token tidak bisa dipakai dua kali bersamaan. Jika penerbitan sesi baru gagal setelah konsumsi, pengguna perlu login lagi.
+Respons login/refresh: `{ accessToken, expiresAt, refreshToken, refreshExpiresAt, user: { id, email, fullName, pictureUrl, role, profileCompleted, profileStep } }`. Frontend menyimpan token hanya di memori dan mengirimkannya kembali di body refresh/logout. Database menyimpan SHA-256 hash; refresh lama ditolak setelah dipakai. Konsumsi refresh memakai update atomik PostgreSQL sehingga satu token tidak bisa dipakai dua kali bersamaan. Jika penerbitan sesi baru gagal setelah konsumsi, pengguna perlu login lagi.
 
 JWT memuat `sub`, `email`, `role`, `profileCompleted`, `jti`, `exp`, `nbf`, `iss`, `aud`. Validator membatasi algoritma ke RS256 dan memeriksa public key, issuer, audience, expiry. Logout mencabut refresh token sesi ini; access token yang sudah terbit tetap valid hingga kedaluwarsa. Sesi perangkat lain tidak dicabut. Key rotation saat ini satu key aktif; penggantian key membatalkan access token lama.
 
 Google verifier memvalidasi signature, audience, issuer, expiry melalui Google.Apis.Auth dan mewajibkan email terverifikasi. Akun dicocokkan dengan `sub`, role selalu User; kesamaan email dengan akun lain ditolak dan tidak otomatis ditautkan. Data identitas Google awal disimpan sebagai JSONB beserta email/nama/foto/sub. Tidak ada redirect/callback server karena GIS popup memberikan credential langsung ke frontend.
 
-Gunakan HTTPS untuk frontend dan API di production. Cookie cross-site bergantung kebijakan third-party cookie browser; deployment pada subdomain same-site lebih andal. Private key dibaca dari path konfigurasi; mount dari secret manager dengan permission terbatas.
+Private key dibaca dari path konfigurasi atau Base64 PEM; mount dari secret manager dengan permission terbatas.
 
 ## Wizard dan kategori
 

@@ -12,7 +12,7 @@ var originPolicy = AllowedOriginPolicy.FromConfiguration(builder.Configuration);
 var storageProvider = (builder.Configuration["Storage:Provider"] ?? "Local").Trim();
 if (!storageProvider.Equals("Local", StringComparison.OrdinalIgnoreCase) && !storageProvider.Equals("S3", StringComparison.OrdinalIgnoreCase))
     throw new InvalidOperationException("Storage:Provider must be Local or S3.");
-string[] required = ["Google:ClientId", "Jwt:KeyId", "Jwt:Issuer", "Jwt:Audience", "Jwt:AccessMinutes", "Jwt:RefreshDays", "Frontend:Origin", "Auth:CookieSecure", "Auth:CookieSameSite"];
+string[] required = ["Google:ClientId", "Jwt:KeyId", "Jwt:Issuer", "Jwt:Audience", "Jwt:AccessMinutes", "Jwt:RefreshDays", "Frontend:Origin"];
 foreach (var key in required) if (string.IsNullOrWhiteSpace(builder.Configuration[key])) throw new InvalidOperationException($"Missing configuration: {key}");
 if (new[] { "PrivateKey", "PublicKey" }.Any(name => new[] { $"Jwt:{name}Base64", $"Jwt:{name}", $"Jwt:{name}Path" }.All(key => string.IsNullOrWhiteSpace(builder.Configuration[key]))))
     throw new InvalidOperationException("Configure both JWT RSA key materials using Base64 PEM, raw PEM, or file paths.");
@@ -21,9 +21,6 @@ if (storageProvider.Equals("S3", StringComparison.OrdinalIgnoreCase))
     foreach (var key in new[] { "Storage:S3:ServiceUrl", "Storage:S3:AccessKey", "Storage:S3:SecretKey", "Storage:S3:Bucket" })
         if (string.IsNullOrWhiteSpace(builder.Configuration[key])) throw new InvalidOperationException($"Missing configuration: {key}");
 foreach (var key in new[] { "Jwt:AccessMinutes", "Jwt:RefreshDays" }) if (!int.TryParse(builder.Configuration[key], out var value) || value < 1) throw new InvalidOperationException($"Invalid configuration: {key}");
-var secure = bool.Parse(builder.Configuration["Auth:CookieSecure"]!);
-var sameSite = Enum.Parse<SameSiteMode>(builder.Configuration["Auth:CookieSameSite"]!, true);
-if ((!builder.Environment.IsDevelopment() && !secure) || (sameSite == SameSiteMode.None && !secure)) throw new InvalidOperationException("Secure cookies required outside Development and with SameSite=None.");
 var origin = originPolicy.PrimaryOrigin;
 builder.Services.AddControllers().AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));
 builder.Services.AddScoped<IWilayahRepository, WilayahRepository>();
@@ -49,7 +46,7 @@ builder.Services.AddSingleton<IGoogleIdentityVerifier, GoogleIdentityVerifier>()
 builder.Services.AddSingleton<IPasswordService, PasswordService>();
 builder.Services.AddSingleton<RsaKeys>();
 builder.Services.AddSingleton<ITokenService, TokenService>();
-builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.SetIsOriginAllowed(originPolicy.IsAllowed).AllowAnyHeader().AllowAnyMethod().AllowCredentials()));
+builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.SetIsOriginAllowed(originPolicy.IsAllowed).AllowAnyHeader().AllowAnyMethod()));
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
 builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme).Configure<RsaKeys>((o, keys) =>
 {
@@ -85,12 +82,6 @@ app.Use(async (context, next) =>
     catch (DbUpdateException e) when (e.InnerException is Npgsql.PostgresException { SqlState: "23505" }) { context.Response.StatusCode = 409; await context.Response.WriteAsJsonAsync(new { title = "Akun sedang diproses atau sudah terdaftar. Coba login kembali.", status = 409 }); }
 });
 app.UseCors();
-// Cookie-authenticated mutations require an exact allowed browser origin, including login (login CSRF).
-app.Use(async (context, next) =>
-{
-    if (context.Request.Path.StartsWithSegments("/api/auth") && HttpMethods.IsPost(context.Request.Method) && !originPolicy.IsAllowed(context.Request.Headers.Origin.ToString())) { context.Response.StatusCode = 403; return; }
-    await next();
-});
 app.UseRateLimiter();
 app.UseAuthentication();
 // Reject stale role/agency claims and suspended agencies on every authenticated request.

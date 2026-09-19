@@ -51,8 +51,8 @@ public class LocalFileStorage : IFileStorage
     private readonly string root;
     public LocalFileStorage(IConfiguration config)
     {
-        root = config["Storage:RootPath"] ?? throw new InvalidOperationException("Missing configuration: Storage:RootPath");
-        if (!Path.IsPathFullyQualified(root)) throw new InvalidOperationException("Storage:RootPath must be an absolute private directory.");
+        var configured = config["Storage:RootPath"] ?? throw new InvalidOperationException("Missing configuration: Storage:RootPath");
+        root = Path.IsPathFullyQualified(configured) ? configured : Path.Combine(AppContext.BaseDirectory, configured);
         Directory.CreateDirectory(root);
     }
     public async Task<string> StoreAsync(Stream content, CancellationToken ct)

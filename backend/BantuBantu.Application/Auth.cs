@@ -4,14 +4,15 @@ namespace BantuBantu.Application;
 
 public record GoogleRequest([Required, MaxLength(10000)] string Credential);
 public record AdminRequest([Required, EmailAddress] string Email, [Required, MaxLength(256)] string Password);
+public record RefreshRequest([Required, MaxLength(256)] string RefreshToken);
 public record GoogleIdentity(string Sub, string Email, string Name, string? Picture, string Json);
 public record UserDto(Guid Id, string Email, string FullName, string? PictureUrl, string Role, bool ProfileCompleted, string ProfileStep, Guid? AgencyId = null)
 {
     public static UserDto From(User u) => new(u.Id, u.Email, u.FullName, u.PictureUrl, u.Role.ToString(), u.ProfileCompleted, u.ProfileCompleted ? "done" : u.ProfileStep, (u as AdminAccount)?.AgencyId);
 }
 public record AccessToken(string Value, DateTimeOffset ExpiresAt);
-public record AuthResponse(string AccessToken, DateTimeOffset ExpiresAt, UserDto User);
-public record AuthResult(AuthResponse Response, string RefreshToken, DateTimeOffset RefreshExpiresAt);
+public record AuthResponse(string AccessToken, DateTimeOffset ExpiresAt, UserDto User, string RefreshToken, DateTimeOffset RefreshExpiresAt);
+public record AuthResult(AuthResponse Response);
 public class AuthenticationFailedException : Exception { }
 public interface IGoogleIdentityVerifier { Task<GoogleIdentity> VerifyAsync(string credential); }
 public interface ITokenService
@@ -77,6 +78,6 @@ public class AuthService(IAuthRepository repository, IGoogleIdentityVerifier goo
         var access = tokens.Create(user); var refresh = tokens.NewRefreshToken(); var expiry = DateTimeOffset.UtcNow.AddDays(tokens.RefreshDays);
         repository.AddSession(new RefreshSession { UserId = user.Id, TokenHash = tokens.Hash(refresh), ExpiresAt = expiry });
         await repository.SaveAsync(ct);
-        return new(new(access.Value, access.ExpiresAt, UserDto.From(user)), refresh, expiry);
+        return new(new(access.Value, access.ExpiresAt, UserDto.From(user), refresh, expiry));
     }
 }

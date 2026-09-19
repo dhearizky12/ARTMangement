@@ -3,6 +3,8 @@ import { AuthApi } from "./authApi";
 const session = {
   accessToken: "test-token",
   expiresAt: new Date(Date.now() + 600000).toISOString(),
+  refreshToken: "refresh-token",
+  refreshExpiresAt: new Date(Date.now() + 86400000).toISOString(),
   user: { role: "Customer" },
 };
 afterEach(() => vi.unstubAllGlobals());
@@ -10,15 +12,18 @@ describe("AuthApi", () => {
   it("shares one refresh request across concurrent consumers", async () => {
     const fetch = vi
       .fn()
-      .mockResolvedValue(
-        new Response(JSON.stringify(session), { status: 200 }),
-      );
+      .mockResolvedValueOnce(new Response(JSON.stringify(session), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(session), { status: 200 }));
     vi.stubGlobal("fetch", fetch);
     const api = new AuthApi("https://api.example.test");
+    await api.admin("admin@example.test", "password");
     const [a, b] = await Promise.all([api.refresh(), api.refresh()]);
     expect(a).toEqual(b);
-    expect(fetch).toHaveBeenCalledTimes(1);
-    expect(fetch.mock.calls[0][1].credentials).toBe("include");
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch.mock.calls[1][1].credentials).toBeUndefined();
+    expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({
+      refreshToken: "refresh-token",
+    });
   });
   it("retries a protected request with a refreshed token on 401", async () => {
     const fetch = vi
@@ -40,10 +45,13 @@ describe("AuthApi", () => {
   it("clears the in-memory session after refresh rejection", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(new Response("{}", { status: 401 })),
+      vi.fn()
+        .mockResolvedValueOnce(new Response(JSON.stringify(session)))
+        .mockResolvedValueOnce(new Response("{}", { status: 401 })),
     );
     const api = new AuthApi("https://api.example.test");
     api.onSession = vi.fn();
+    await api.admin("admin@example.test", "password");
     await expect(api.refresh()).rejects.toMatchObject({ status: 401 });
     expect(api.onSession).toHaveBeenCalledWith(null);
   });
@@ -56,7 +64,7 @@ describe("AuthApi", () => {
       );
     vi.stubGlobal("fetch", fetch);
     const api = new AuthApi("https://api.example.test");
-    await api.refresh();
+    await api.admin("admin@example.test", "password");
     const body = new FormData();
     body.append("documentType", "KTP");
     body.append("file", new Blob(["test"], { type: "image/png" }), "test.png");

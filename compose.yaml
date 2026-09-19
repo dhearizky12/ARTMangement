@@ -30,8 +30,6 @@ x-api: &api
     Frontend__Origin: ${FRONTEND_ORIGIN:?Isi FRONTEND_ORIGIN di .env}
     Frontend__Origins: ${FRONTEND_ORIGINS:-}
     Frontend__OriginPatterns: ${FRONTEND_ORIGIN_PATTERNS:-}
-    Auth__CookieSecure: ${COOKIE_SECURE:-false}
-    Auth__CookieSameSite: ${COOKIE_SAME_SITE:-Lax}
     AllowedHosts: ${ALLOWED_HOSTS:-localhost}
   volumes:
     - rsa_keys:/run/keys:ro

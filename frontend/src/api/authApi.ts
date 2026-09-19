@@ -13,6 +13,8 @@ export interface Session {
   accessToken: string;
   expiresAt: string;
   user: User;
+  refreshToken: string;
+  refreshExpiresAt: string;
 }
 export class ApiError extends Error {
   constructor(
@@ -41,7 +43,6 @@ export class AuthApi {
   ): Promise<T> {
     const response = await fetch(`${this.baseUrl}${path}`, {
       method: method || (body === undefined ? "GET" : "POST"),
-      credentials: "include",
       headers: {
         ...(body === undefined || body instanceof FormData
           ? {}
@@ -54,6 +55,8 @@ export class AuthApi {
     });
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
+      if (error.code === "PROFILE_INCOMPLETE" && typeof window !== "undefined")
+        window.dispatchEvent(new Event("profile-required"));
       const details = error.errors
         ? Object.values(error.errors).flat().join(" ")
         : null;
@@ -77,8 +80,16 @@ export class AuthApi {
     this.setSession(s);
   }
   refresh(): Promise<Session> {
+    const refreshToken = this.session?.refreshToken;
+    if (!refreshToken) {
+      const error = new ApiError(401, "Sesi login tidak tersedia.");
+      this.setSession(null);
+      return Promise.reject(error);
+    }
     if (!this.refreshPending)
-      this.refreshPending = this.request<Session>("/api/auth/refresh", {})
+      this.refreshPending = this.request<Session>("/api/auth/refresh", {
+        refreshToken,
+      })
         .then((s) => {
           this.setSession(s);
           return s;
@@ -93,7 +104,10 @@ export class AuthApi {
     return this.refreshPending;
   }
   async logout() {
-    await this.request("/api/auth/logout", {});
+    if (this.session?.refreshToken)
+      await this.request("/api/auth/logout", {
+        refreshToken: this.session.refreshToken,
+      });
     this.setSession(null);
   }
   updateUser(user: Partial<User>) {

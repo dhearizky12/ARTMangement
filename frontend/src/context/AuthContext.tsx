@@ -17,15 +17,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState("");
   useEffect(() => {
     authApi.onSession = setSession;
-    authApi
-      .refresh()
-      .catch((e) => {
-        if (e.status !== 401)
-          setError(
-            "Tidak dapat terhubung ke server. Periksa koneksi lalu muat ulang.",
-          );
-      })
-      .finally(() => setLoading(false));
+    setLoading(false);
     return () => {
       authApi.onSession = () => {};
     };

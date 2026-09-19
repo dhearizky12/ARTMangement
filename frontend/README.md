@@ -17,9 +17,9 @@ Isi `VITE_API_BASE_URL` dengan origin API (contoh lokal `http://localhost:5080`)
 npm run dev -- --host localhost --port 5173 --strictPort
 ```
 
-Konfigurasikan OAuth consent screen di Google Cloud, buat OAuth client tipe Web application, dan tambahkan `http://localhost:5173` sebagai **Authorized JavaScript origin**. Jika aplikasi Google masih Testing, tambahkan akun penguji. Alur popup credential ini tidak memerlukan Client Secret maupun redirect callback backend. Jangan campur `localhost` dan `127.0.0.1` antara FE/BE karena cookie dan origin berbeda.
+Konfigurasikan OAuth consent screen di Google Cloud, buat OAuth client tipe Web application, dan tambahkan `http://localhost:5173` sebagai **Authorized JavaScript origin**. Jika aplikasi Google masih Testing, tambahkan akun penguji. Alur popup credential ini tidak memerlukan Client Secret maupun redirect callback backend. Jangan campur `localhost` dan `127.0.0.1` antara FE/BE karena origin berbeda.
 
-Frontend menyimpan access token hanya di memori; fetch memakai `credentials: include`. Refresh pada startup, sebelum expiry, dan setelah HTTP 401. Request refresh bersamaan dalam satu tab digabung menjadi satu promise. Kegagalan refresh menghapus sesi. Tidak ada JWT/refresh token di localStorage/sessionStorage. Guard route mengikuti role dari respons server; backend tetap menjadi sumber otorisasi yang sebenarnya.
+Frontend menyimpan access token dan refresh token hanya di memori, lalu mengirim access token sebagai `Authorization: Bearer <token>`. Refresh dilakukan sebelum expiry dan setelah HTTP 401. Request refresh bersamaan dalam satu tab digabung menjadi satu promise. Kegagalan refresh menghapus sesi. Tidak ada JWT/refresh token di localStorage/sessionStorage. Guard route mengikuti role dari respons server; backend tetap menjadi sumber otorisasi yang sebenarnya.
 
 ## Demo marketplace
 
@@ -28,7 +28,7 @@ Frontend menyimpan access token hanya di memori; fetch memakai `credentials: inc
 3. Klik `Masuk & Pesan` dari detail provider. Setelah Google login, Customer kembali ke detail lalu mengisi tanggal serta lokasi layanan.
 4. `/admin/login` membuka area admin. Platform Admin membuat agency/provider; Agency Admin hanya melihat roster agency yang ada di claim `agencyId`.
 5. `/admin/providers/:id` menjalankan personal, alamat, KTP/KK, layanan, dan checklist verifikasi. Status tahap disimpan server dan aman saat reload.
-6. Refresh token hanya muncul sebagai cookie httpOnly; JWT memakai RS256 dan public key tersedia di JWKS API.
+6. Refresh token dikirim di body JSON; JWT memakai RS256 dan public key tersedia di JWKS API.
 
 Bottom navigation membuka Beranda, Cari, Pesanan, dan Akun. Customer tidak memiliki wizard onboarding wajib; alamat layanan tersimpan pada Order.
 

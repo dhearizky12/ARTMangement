@@ -1,0 +1,99 @@
+name: Deploy Bantu-Bantu
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Deploy backend to MonsterASP.NET
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      JWT_AUDIENCE: ${{ secrets.JWT_AUDIENCE }}
+      JWT_ACCESS_MINUTES: ${{ secrets.JWT_ACCESS_MINUTES }}
+      JWT_REFRESH_DAYS: ${{ secrets.JWT_REFRESH_DAYS }}
+      FRONTEND_ORIGIN: ${{ secrets.FRONTEND_ORIGIN }}
+      MONSTERASP_FTP_PASSWORD: ${{ secrets.MONSTERASP_FTP_PASSWORD }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore persistent RSA key pair
+        env:
+          DEPLOY_RSA_PRIVATE_KEY_B64: ${{ secrets.DEPLOY_RSA_PRIVATE_KEY_B64 }}
+          DEPLOY_RSA_PUBLIC_KEY_B64: ${{ secrets.DEPLOY_RSA_PUBLIC_KEY_B64 }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_RSA_PRIVATE_KEY_B64"
+          test -n "$DEPLOY_RSA_PUBLIC_KEY_B64"
+          install -d -m 700 .deploy/monsterasp
+          printf '%s' "$DEPLOY_RSA_PRIVATE_KEY_B64" | base64 --decode > .deploy/monsterasp/private.pem
+          printf '%s' "$DEPLOY_RSA_PUBLIC_KEY_B64" | base64 --decode > .deploy/monsterasp/public.pem
+          chmod 600 .deploy/monsterasp/private.pem
+          chmod 644 .deploy/monsterasp/public.pem
+
+      - name: Reconstruct deploy environment
+        run: |
+          set -euo pipefail
+          write_env() { printf '%s=%q\n' "$1" "$2"; }
+          : > .env
+          write_env DATABASE_URL "$DATABASE_URL" >> .env
+          write_env DATABASE_URL_UNPOOLED "$DATABASE_URL_UNPOOLED" >> .env
+          write_env GOOGLE_CLIENT_ID "$GOOGLE_CLIENT_ID" >> .env
+          write_env JWT_AUDIENCE "$JWT_AUDIENCE" >> .env
+          write_env JWT_ACCESS_MINUTES "${JWT_ACCESS_MINUTES:-15}" >> .env
+          write_env JWT_REFRESH_DAYS "${JWT_REFRESH_DAYS:-7}" >> .env
+          write_env FRONTEND_ORIGIN "${FRONTEND_ORIGIN:-https://art-mngmnt.web.app}" >> .env
+          write_env MONSTERASP_FTP_PASSWORD "$MONSTERASP_FTP_PASSWORD" >> .env
+
+      - name: Deploy and verify backend
+        run: bash ./deploy-be.sh
+
+  frontend:
+    name: Deploy frontend to Firebase Hosting
+    runs-on: ubuntu-latest
+    env:
+      VITE_API_BASE_URL: http://bantu-bantu.runasp.net
+      VITE_GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          test -n "$VITE_GOOGLE_CLIENT_ID"
+          test -n "$FIREBASE_TOKEN"
+          npm run build
+
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools
+
+      - name: Deploy Firebase Hosting
+        working-directory: frontend
+        run: firebase deploy --only hosting --project art-mngmnt --token "$FIREBASE_TOKEN"
