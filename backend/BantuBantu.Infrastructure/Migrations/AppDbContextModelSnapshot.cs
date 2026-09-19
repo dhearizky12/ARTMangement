@@ -23,6 +23,90 @@ namespace BantuBantu.Infrastructure.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "pg_trgm");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("BantuBantu.Domain.Agency", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContactInfo")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Agencies");
+                });
+
+            modelBuilder.Entity("BantuBantu.Domain.AuditEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("ActorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Detail")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("ProviderId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("AuditEntries");
+                });
+
+            modelBuilder.Entity("BantuBantu.Domain.ContentBlock", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ContentBlocks");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = "verification",
+                            Body = "Admin memeriksa identitas, latar belakang, dan kontrak sebelum profil penyedia diterbitkan. Lencana terverifikasi menunjukkan pemeriksaan tersebut telah selesai, bukan jaminan atas setiap hasil layanan.",
+                            SortOrder = 1,
+                            Title = "Kenali proses verifikasi kami"
+                        });
+                });
+
             modelBuilder.Entity("BantuBantu.Domain.District", b =>
                 {
                     b.Property<string>("Id")
@@ -73,6 +157,225 @@ namespace BantuBantu.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("ExternalLogins");
+                });
+
+            modelBuilder.Entity("BantuBantu.Domain.Order", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AddressDetail")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Price")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("PricingType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("ProviderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("ScheduledDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<string>("VillageId")
+                        .IsRequired()
+                        .HasColumnType("character varying(10)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerId");
+
+                    b.HasIndex("ProviderId");
+
+                    b.HasIndex("VillageId");
+
+                    b.ToTable("Orders");
+                });
+
+            modelBuilder.Entity("BantuBantu.Domain.Provider", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AddressDetail")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Age")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("AgencyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("BackgroundCheckPassed")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Bio")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("ContractSigned")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IdentityVerified")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("JobsCompletedCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PostalCode")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("Price")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("PricingType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("VerificationStatus")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<string>("VillageId")
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<int>("YearsOfExperience")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgencyId");
+
+                    b.HasIndex("VillageId");
+
+                    b.ToTable("Providers");
+                });
+
+            modelBuilder.Entity("BantuBantu.Domain.ProviderAvailability", b =>
+                {
+                    b.Property<Guid>("ProviderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("DayOfWeek")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsAvailable")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("ProviderId", "DayOfWeek");
+
+                    b.ToTable("ProviderAvailability");
+                });
+
+            modelBuilder.Entity("BantuBantu.Domain.ProviderCategory", b =>
+                {
+                    b.Property<Guid>("ProviderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ServiceCategoryId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("ProviderId", "ServiceCategoryId");
+
+                    b.HasIndex("ServiceCategoryId");
+
+                    b.ToTable("ProviderCategory");
+                });
+
+            modelBuilder.Entity("BantuBantu.Domain.ProviderDocument", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DocumentType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("ProviderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("StorageKey")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("UploadedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProviderId", "DocumentType")
+                        .IsUnique();
+
+                    b.ToTable("ProviderDocument");
+                });
+
+            modelBuilder.Entity("BantuBantu.Domain.ProviderLanguage", b =>
+                {
+                    b.Property<Guid>("ProviderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LanguageName")
+                        .HasColumnType("text");
+
+                    b.HasKey("ProviderId", "LanguageName");
+
+                    b.ToTable("ProviderLanguage");
+                });
+
+            modelBuilder.Entity("BantuBantu.Domain.ProviderSkill", b =>
+                {
+                    b.Property<Guid>("ProviderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SkillName")
+                        .HasColumnType("text");
+
+                    b.HasKey("ProviderId", "SkillName");
+
+                    b.ToTable("ProviderSkill");
                 });
 
             modelBuilder.Entity("BantuBantu.Domain.Province", b =>
@@ -138,6 +441,46 @@ namespace BantuBantu.Infrastructure.Migrations
                     b.HasIndex("ProvinceId");
 
                     b.ToTable("Regencies");
+                });
+
+            modelBuilder.Entity("BantuBantu.Domain.Review", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Comment")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProviderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Rating")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerId");
+
+                    b.HasIndex("OrderId")
+                        .IsUnique();
+
+                    b.HasIndex("ProviderId");
+
+                    b.ToTable("Reviews", t =>
+                        {
+                            t.HasCheckConstraint("CK_Review_Rating", "\"Rating\" BETWEEN 1 AND 5");
+                        });
                 });
 
             modelBuilder.Entity("BantuBantu.Domain.ServiceCategory", b =>
@@ -242,9 +585,6 @@ namespace BantuBantu.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("PasswordHash")
-                        .HasColumnType("text");
-
                     b.Property<string>("PictureUrl")
                         .HasColumnType("text");
 
@@ -264,7 +604,9 @@ namespace BantuBantu.Infrastructure.Migrations
                     b.HasIndex("Email")
                         .IsUnique();
 
-                    b.ToTable("Users");
+                    b.ToTable("Users", (string)null);
+
+                    b.UseTptMappingStrategy();
                 });
 
             modelBuilder.Entity("BantuBantu.Domain.UserAddress", b =>
@@ -395,6 +737,22 @@ namespace BantuBantu.Infrastructure.Migrations
                     b.ToTable("Villages");
                 });
 
+            modelBuilder.Entity("BantuBantu.Domain.AdminAccount", b =>
+                {
+                    b.HasBaseType("BantuBantu.Domain.User");
+
+                    b.Property<Guid?>("AgencyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasIndex("AgencyId");
+
+                    b.ToTable("AdminAccounts", (string)null);
+                });
+
             modelBuilder.Entity("BantuBantu.Domain.District", b =>
                 {
                     b.HasOne("BantuBantu.Domain.Regency", "Regency")
@@ -417,6 +775,113 @@ namespace BantuBantu.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("BantuBantu.Domain.Order", b =>
+                {
+                    b.HasOne("BantuBantu.Domain.User", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("BantuBantu.Domain.Provider", "Provider")
+                        .WithMany("Orders")
+                        .HasForeignKey("ProviderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("BantuBantu.Domain.Village", "Village")
+                        .WithMany()
+                        .HasForeignKey("VillageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Customer");
+
+                    b.Navigation("Provider");
+
+                    b.Navigation("Village");
+                });
+
+            modelBuilder.Entity("BantuBantu.Domain.Provider", b =>
+                {
+                    b.HasOne("BantuBantu.Domain.Agency", "Agency")
+                        .WithMany()
+                        .HasForeignKey("AgencyId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("BantuBantu.Domain.Village", "Village")
+                        .WithMany()
+                        .HasForeignKey("VillageId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Agency");
+
+                    b.Navigation("Village");
+                });
+
+            modelBuilder.Entity("BantuBantu.Domain.ProviderAvailability", b =>
+                {
+                    b.HasOne("BantuBantu.Domain.Provider", "Provider")
+                        .WithMany("Availability")
+                        .HasForeignKey("ProviderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Provider");
+                });
+
+            modelBuilder.Entity("BantuBantu.Domain.ProviderCategory", b =>
+                {
+                    b.HasOne("BantuBantu.Domain.Provider", "Provider")
+                        .WithMany("Categories")
+                        .HasForeignKey("ProviderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("BantuBantu.Domain.ServiceCategory", "ServiceCategory")
+                        .WithMany()
+                        .HasForeignKey("ServiceCategoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Provider");
+
+                    b.Navigation("ServiceCategory");
+                });
+
+            modelBuilder.Entity("BantuBantu.Domain.ProviderDocument", b =>
+                {
+                    b.HasOne("BantuBantu.Domain.Provider", "Provider")
+                        .WithMany("Documents")
+                        .HasForeignKey("ProviderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Provider");
+                });
+
+            modelBuilder.Entity("BantuBantu.Domain.ProviderLanguage", b =>
+                {
+                    b.HasOne("BantuBantu.Domain.Provider", "Provider")
+                        .WithMany("Languages")
+                        .HasForeignKey("ProviderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Provider");
+                });
+
+            modelBuilder.Entity("BantuBantu.Domain.ProviderSkill", b =>
+                {
+                    b.HasOne("BantuBantu.Domain.Provider", "Provider")
+                        .WithMany("Skills")
+                        .HasForeignKey("ProviderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Provider");
+                });
+
             modelBuilder.Entity("BantuBantu.Domain.RefreshSession", b =>
                 {
                     b.HasOne("BantuBantu.Domain.User", "User")
@@ -437,6 +902,33 @@ namespace BantuBantu.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Province");
+                });
+
+            modelBuilder.Entity("BantuBantu.Domain.Review", b =>
+                {
+                    b.HasOne("BantuBantu.Domain.User", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("BantuBantu.Domain.Order", "Order")
+                        .WithOne("Review")
+                        .HasForeignKey("BantuBantu.Domain.Review", "OrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("BantuBantu.Domain.Provider", "Provider")
+                        .WithMany("Reviews")
+                        .HasForeignKey("ProviderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Customer");
+
+                    b.Navigation("Order");
+
+                    b.Navigation("Provider");
                 });
 
             modelBuilder.Entity("BantuBantu.Domain.UserAddress", b =>
@@ -488,6 +980,44 @@ namespace BantuBantu.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("District");
+                });
+
+            modelBuilder.Entity("BantuBantu.Domain.AdminAccount", b =>
+                {
+                    b.HasOne("BantuBantu.Domain.Agency", "Agency")
+                        .WithMany()
+                        .HasForeignKey("AgencyId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("BantuBantu.Domain.User", null)
+                        .WithOne()
+                        .HasForeignKey("BantuBantu.Domain.AdminAccount", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Agency");
+                });
+
+            modelBuilder.Entity("BantuBantu.Domain.Order", b =>
+                {
+                    b.Navigation("Review");
+                });
+
+            modelBuilder.Entity("BantuBantu.Domain.Provider", b =>
+                {
+                    b.Navigation("Availability");
+
+                    b.Navigation("Categories");
+
+                    b.Navigation("Documents");
+
+                    b.Navigation("Languages");
+
+                    b.Navigation("Orders");
+
+                    b.Navigation("Reviews");
+
+                    b.Navigation("Skills");
                 });
 #pragma warning restore 612, 618
         }

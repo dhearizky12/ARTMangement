@@ -1,0 +1,58 @@
+services:
+  - type: web
+    name: bantu-bantu-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: ASPNETCORE_HTTP_PORTS
+        value: "8080"
+      - key: DATABASE_URL
+        sync: false
+      - key: Google__ClientId
+        sync: false
+      - key: Google__ClientSecret
+        sync: false
+      - key: Jwt__KeyId
+        sync: false
+      - key: Jwt__PrivateKeyBase64
+        sync: false
+      - key: Jwt__PublicKeyBase64
+        sync: false
+      - key: Jwt__Issuer
+        sync: false
+      - key: Jwt__Audience
+        sync: false
+      - key: Jwt__AccessMinutes
+        value: "15"
+      - key: Jwt__RefreshDays
+        value: "7"
+      - key: Frontend__Origin
+        sync: false
+      - key: Frontend__Origins
+        sync: false
+      - key: Frontend__OriginPatterns
+        sync: false
+      - key: Auth__CookieSecure
+        value: "true"
+      - key: Auth__CookieSameSite
+        value: "None"
+      - key: AllowedHosts
+        sync: false
+      - key: Storage__Provider
+        value: S3
+      - key: Storage__S3__ServiceUrl
+        sync: false
+      - key: Storage__S3__Region
+        value: auto
+      - key: Storage__S3__AccessKey
+        sync: false
+      - key: Storage__S3__SecretKey
+        sync: false
+      - key: Storage__S3__Bucket
+        sync: false
+      - key: Storage__S3__KeyPrefix
+        value: provider-documents

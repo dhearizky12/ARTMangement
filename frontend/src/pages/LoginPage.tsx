@@ -2,18 +2,26 @@ import { ShieldCheck, ArrowUpRight } from "lucide-react";
 import { Badge } from "../components/ui";
 import { useState } from "react";
 import { GoogleLogin } from "@react-oauth/google";
-import { Link, Navigate } from "react-router-dom";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { authApi } from "../api/authApi";
 import { useAuth } from "../context/AuthContext";
 import { AuthLayout } from "../components/AuthLayout";
 export function LoginPage() {
+  const [params] = useSearchParams();
+  const requested = params.get("returnTo") || "/";
+  const returnTo =
+    /^\/(?![\/\\])/.test(requested) &&
+    !requested.startsWith("/login") &&
+    !requested.startsWith("/admin")
+      ? requested
+      : "/";
   const { session, loading, error: connectionError } = useAuth();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   if (session)
     return (
       <Navigate
-        to={session.user.role === "Admin" ? "/admin" : "/dashboard"}
+        to={session.user.role !== "Customer" ? "/admin" : returnTo}
         replace
       />
     );

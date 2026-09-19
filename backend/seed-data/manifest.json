@@ -1,9 +1,9 @@
 {
   "repository": "https://github.com/cahyadsn/wilayah",
-  "commit": "3e4af99baa7ffbff53e311894e6a4e133d68c066",
-  "date": "2026-09-09T00:44:29Z",
+  "commit": "3c08b4ca92ab83735f87e21b9eb0ffed19eddee6",
+  "date": "2026-09-15T04:08:38Z",
   "datasetCommit": "d68e8d5516f969d1905d0b2940f20034becb0db7",
   "datasetDate": "2026-02-13T09:48:30Z",
-  "fetchedAt": "2026-09-09T22:05:58.901457+00:00",
+  "fetchedAt": "2026-09-16T07:12:35.937255+00:00",
   "sha256": "c4c3396d9380d4edee072af1d9dff83573b574d7cd00a6562cf82e200e954031"
 }

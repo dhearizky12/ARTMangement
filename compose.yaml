@@ -9,16 +9,27 @@ x-api: &api
     ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
     ASPNETCORE_HTTP_PORTS: "8080"
     Storage__RootPath: /app-data/documents
-    ConnectionStrings__Default: Host=db;Port=5432;Database=${POSTGRES_DB:-bantubantu};Username=${POSTGRES_USER:-bantubantu};Password=${POSTGRES_PASSWORD:-}
+    Storage__Provider: ${STORAGE_PROVIDER:-Local}
+    Storage__S3__ServiceUrl: ${STORAGE_S3_SERVICE_URL:-}
+    Storage__S3__Region: ${STORAGE_S3_REGION:-auto}
+    Storage__S3__AccessKey: ${STORAGE_S3_ACCESS_KEY:-}
+    Storage__S3__SecretKey: ${STORAGE_S3_SECRET_KEY:-}
+    Storage__S3__Bucket: ${STORAGE_S3_BUCKET:-}
+    Storage__S3__KeyPrefix: ${STORAGE_S3_KEY_PREFIX:-provider-documents}
+    ConnectionStrings__Default: ${DATABASE_URL:?Isi DATABASE_URL Neon di .env}
     Google__ClientId: ${GOOGLE_CLIENT_ID:?Isi GOOGLE_CLIENT_ID di .env}
     Jwt__PrivateKeyPath: /run/keys/private.pem
     Jwt__PublicKeyPath: /run/keys/public.pem
+    Jwt__PrivateKeyBase64: ${JWT_PRIVATE_KEY_BASE64:-}
+    Jwt__PublicKeyBase64: ${JWT_PUBLIC_KEY_BASE64:-}
     Jwt__KeyId: ${JWT_KEY_ID:?Isi JWT_KEY_ID di .env}
     Jwt__Issuer: ${JWT_ISSUER:?Isi JWT_ISSUER di .env}
     Jwt__Audience: ${JWT_AUDIENCE:?Isi JWT_AUDIENCE di .env}
     Jwt__AccessMinutes: ${JWT_ACCESS_MINUTES:-15}
     Jwt__RefreshDays: ${JWT_REFRESH_DAYS:-7}
     Frontend__Origin: ${FRONTEND_ORIGIN:?Isi FRONTEND_ORIGIN di .env}
+    Frontend__Origins: ${FRONTEND_ORIGINS:-}
+    Frontend__OriginPatterns: ${FRONTEND_ORIGIN_PATTERNS:-}
     Auth__CookieSecure: ${COOKIE_SECURE:-false}
     Auth__CookieSameSite: ${COOKIE_SAME_SITE:-Lax}
     AllowedHosts: ${ALLOWED_HOSTS:-localhost}
@@ -26,34 +37,12 @@ x-api: &api
     - rsa_keys:/run/keys:ro
     - document_data:/app-data/documents
   depends_on:
-    db:
-      condition: service_healthy
-    wilayah-seed:
-      condition: service_completed_successfully
     keys:
       condition: service_completed_successfully
     migrate:
       condition: service_completed_successfully
 
 services:
-  db:
-    image: postgres:17-alpine
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-bantubantu}
-      POSTGRES_USER: ${POSTGRES_USER:-bantubantu}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
-      # Passwordless authentication for the local Docker database.
-      POSTGRES_HOST_AUTH_METHOD: ${POSTGRES_HOST_AUTH_METHOD:-trust}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-      start_period: 10s
-    restart: unless-stopped
-
   keys:
     build:
       context: ./docker
@@ -69,21 +58,18 @@ services:
       context: ./backend
       target: migrations
     environment:
-      ConnectionStrings__Default: Host=db;Port=5432;Database=${POSTGRES_DB:-bantubantu};Username=${POSTGRES_USER:-bantubantu};Password=${POSTGRES_PASSWORD:-}
-    depends_on:
-      db:
-        condition: service_healthy
+      DATABASE_URL: ${DATABASE_URL:?Isi DATABASE_URL Neon di .env}
+      DATABASE_URL_UNPOOLED: ${DATABASE_URL_UNPOOLED:-}
     restart: "no"
 
   wilayah-seed:
+    profiles: ["tools"]
     build:
       context: ./backend
       dockerfile: scripts/seed.Dockerfile
     environment:
-      PGHOST: db
-      PGDATABASE: ${POSTGRES_DB:-bantubantu}
-      PGUSER: ${POSTGRES_USER:-bantubantu}
-      PGPASSWORD: ${POSTGRES_PASSWORD:-}
+      DATABASE_URL: ${DATABASE_URL:?Isi DATABASE_URL Neon di .env}
+      DATABASE_URL_UNPOOLED: ${DATABASE_URL_UNPOOLED:-}
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -119,6 +105,5 @@ services:
     restart: "no"
 
 volumes:
-  postgres_data:
   document_data:
   rsa_keys:

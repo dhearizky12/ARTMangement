@@ -2,8 +2,10 @@ import { useEffect, useId, useRef, useState } from "react";
 import { wilayahApi, type VillageResult } from "../api/wilayahApi";
 export function AddressCombobox({
   onChange,
+  required = true,
 }: {
   onChange: (value: VillageResult | null) => void;
+  required?: boolean;
 }) {
   const id = useId();
   const [query, setQuery] = useState("");
@@ -68,7 +70,7 @@ export function AddressCombobox({
         autoComplete="off"
         placeholder="Cari nama kelurahan atau desa"
         value={query}
-        required
+        required={required}
         onFocus={() => setOpen(true)}
         onChange={(e) => {
           selected.current = false;
@@ -86,8 +88,14 @@ export function AddressCombobox({
             setOpen(true);
             setActive((index) =>
               results.length
-                ? (index + (e.key === "ArrowDown" ? 1 : -1) + results.length) %
-                  results.length
+                ? index < 0
+                  ? e.key === "ArrowDown"
+                    ? 0
+                    : results.length - 1
+                  : (index +
+                      (e.key === "ArrowDown" ? 1 : -1) +
+                      results.length) %
+                    results.length
                 : -1,
             );
           }

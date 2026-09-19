@@ -1,19 +1,18 @@
-import { Navigate, Outlet } from "react-router-dom";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import type { Role } from "../api/authApi";
-export function ProtectedRoute({ role }: { role: Role }) {
+export function ProtectedRoute({ platform = false }: { platform?: boolean }) {
   const { session, loading } = useAuth();
+  const location = useLocation();
   if (loading) return <main className="loading">Memeriksa sesi…</main>;
   if (!session)
     return (
-      <Navigate to={role === "Admin" ? "/admin/login" : "/login"} replace />
-    );
-  if (session.user.role !== role)
-    return (
       <Navigate
-        to={session.user.role === "Admin" ? "/admin" : "/dashboard"}
+        to={`/admin/login?returnTo=${encodeURIComponent(location.pathname)}`}
         replace
       />
     );
+  if (session.user.role === "Customer") return <Navigate to="/" replace />;
+  if (platform && session.user.role !== "PlatformAdmin")
+    return <Navigate to="/admin" replace />;
   return <Outlet />;
 }

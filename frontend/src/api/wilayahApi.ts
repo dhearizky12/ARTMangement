@@ -11,7 +11,7 @@ export interface VillageResult {
 
 export const wilayahApi = {
   search: (query: string) =>
-    authApi.get<VillageResult[]>(
+    authApi.publicGet<VillageResult[]>(
       `/api/wilayah/search?q=${encodeURIComponent(query.trim())}&limit=10`,
     ),
 };

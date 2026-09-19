@@ -1,4 +1,5 @@
 namespace BantuBantu.Domain;
+
 public enum VillageType { Kelurahan, Desa, DesaAdat }
 public class Province { public string Id { get; set; } = ""; public string Name { get; set; } = ""; }
 public class Regency { public string Id { get; set; } = ""; public string Name { get; set; } = ""; public string ProvinceId { get; set; } = ""; public Province Province { get; set; } = null!; }

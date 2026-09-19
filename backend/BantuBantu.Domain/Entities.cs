@@ -1,16 +1,15 @@
 namespace BantuBantu.Domain;
 
-public enum UserRole { User, Admin }
+public enum UserRole { Customer, Provider, AgencyAdmin, PlatformAdmin }
 public class User
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Email { get; set; } = "";
     public string FullName { get; set; } = "";
     public string? PictureUrl { get; set; }
-    public UserRole Role { get; set; } = UserRole.User;
-    public bool ProfileCompleted { get; set; }
-    public string ProfileStep { get; set; } = "personal";
-    public string? PasswordHash { get; set; }
+    public UserRole Role { get; set; } = UserRole.Customer;
+    public bool ProfileCompleted { get; set; } = true;
+    public string ProfileStep { get; set; } = "done";
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 public class ExternalLogin
