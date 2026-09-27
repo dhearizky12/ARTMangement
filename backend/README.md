@@ -107,11 +107,16 @@ Semua route autentikasi dibatasi 20 request/menit per alamat IP. Akses API memak
 |---|---|---|
 | POST | `/api/auth/google` | `{ "credential": "GOOGLE_ID_TOKEN" }` |
 | POST | `/api/auth/admin/login` | `{ "email": "...", "password": "..." }` |
+| POST | `/api/auth/provider/login` | `{ "email": "...", "password": "..." }` |
+| POST | `/api/auth/provider/change-password` | Provider Bearer token; `{ "currentPassword": "...", "newPassword": "..." }` |
 | POST | `/api/auth/refresh` | `{ "refreshToken": "..." }` |
 | POST | `/api/auth/logout` | `{ "refreshToken": "..." }` |
 | GET | `/api/auth/me` | Bearer access token |
-| GET | `/api/user/dashboard` | Role User + profil lengkap |
-| GET | `/api/admin/dashboard` | Role Admin |
+| GET | `/api/user/dashboard` | Role Customer |
+| GET | `/api/admin/dashboard` | Role PlatformAdmin atau AgencyAdmin |
+| GET | `/api/provider/profile` | Role Provider; profil Provider sendiri |
+| PUT | `/api/provider/availability` | Role Provider; ketersediaan Provider sendiri |
+| GET | `/api/provider/orders` | Role Provider; order yang ditugaskan ke Provider sendiri |
 | GET | `/.well-known/jwks.json` | Public RSA key saja |
 | GET | `/health` | Liveness, tidak memeriksa koneksi database |
 
@@ -119,7 +124,9 @@ Respons login/refresh: `{ accessToken, expiresAt, refreshToken, refreshExpiresAt
 
 JWT memuat `sub`, `email`, `role`, `profileCompleted`, `jti`, `exp`, `nbf`, `iss`, `aud`. Validator membatasi algoritma ke RS256 dan memeriksa public key, issuer, audience, expiry. Logout mencabut refresh token sesi ini; access token yang sudah terbit tetap valid hingga kedaluwarsa. Sesi perangkat lain tidak dicabut. Key rotation saat ini satu key aktif; penggantian key membatalkan access token lama.
 
-Google verifier memvalidasi signature, audience, issuer, expiry melalui Google.Apis.Auth dan mewajibkan email terverifikasi. Akun dicocokkan dengan `sub`, role selalu User; kesamaan email dengan akun lain ditolak dan tidak otomatis ditautkan. Data identitas Google awal disimpan sebagai JSONB beserta email/nama/foto/sub. Tidak ada redirect/callback server karena GIS popup memberikan credential langsung ke frontend.
+Google verifier memvalidasi signature, audience, issuer, expiry melalui Google.Apis.Auth dan mewajibkan email terverifikasi. Akun dicocokkan dengan `sub`, role selalu Customer; kesamaan email dengan akun lain ditolak dan tidak otomatis ditautkan. Data identitas Google awal disimpan sebagai JSONB beserta email/nama/foto/sub. Tidak ada redirect/callback server karena GIS popup memberikan credential langsung ke frontend.
+
+Provider dibuat admin melalui `POST /api/admin/providers` dengan `agencyId`, `email`, dan password awal minimal 14 karakter. Email disimpan di `ProviderCredentials`, password memakai ASP.NET Identity PasswordHasher yang sama dengan admin. Provider login menghasilkan role `Provider` dan claim `providerId`; repository scope membatasi profil, ketersediaan, dan order ke Provider tersebut. Belum ada alur lupa password/email reset.
 
 Private key dibaca dari path konfigurasi atau Base64 PEM; mount dari secret manager dengan permission terbatas.
 

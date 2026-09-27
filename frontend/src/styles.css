@@ -263,6 +263,11 @@ form .btn {
   display: none;
   font-size: var(--text-caption);
 }
+.provider-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
 .page {
   width: 100%;
   max-width: var(--page-width);

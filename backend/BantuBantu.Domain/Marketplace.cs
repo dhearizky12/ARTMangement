@@ -41,6 +41,7 @@ public class Provider
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
     public uint Version { get; set; }
+    public ProviderCredential? Credential { get; set; }
     public List<ProviderCategory> Categories { get; set; } = [];
     public List<ProviderSkill> Skills { get; set; } = [];
     public List<ProviderLanguage> Languages { get; set; } = [];
@@ -48,6 +49,23 @@ public class Provider
     public List<ProviderDocument> Documents { get; set; } = [];
     public List<Review> Reviews { get; set; } = [];
     public List<Order> Orders { get; set; } = [];
+}
+public class ProviderCredential
+{
+    public Guid ProviderId { get; set; }
+    public Provider Provider { get; set; } = null!;
+    public string Email { get; set; } = "";
+    public string PasswordHash { get; set; } = "";
+    public DateTimeOffset PasswordChangedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+public class ProviderRefreshSession
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid ProviderId { get; set; }
+    public Provider Provider { get; set; } = null!;
+    public string TokenHash { get; set; } = "";
+    public DateTimeOffset ExpiresAt { get; set; }
+    public DateTimeOffset? RevokedAt { get; set; }
 }
 public class ProviderCategory { public Guid ProviderId { get; set; } public Provider Provider { get; set; } = null!; public Guid ServiceCategoryId { get; set; } public ServiceCategory ServiceCategory { get; set; } = null!; }
 public class ProviderSkill { public Guid ProviderId { get; set; } public Provider Provider { get; set; } = null!; public string SkillName { get; set; } = ""; }

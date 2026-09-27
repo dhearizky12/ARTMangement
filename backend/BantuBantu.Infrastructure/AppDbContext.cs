@@ -19,6 +19,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<AdminAccount> AdminAccounts => Set<AdminAccount>();
     public DbSet<Agency> Agencies => Set<Agency>();
     public DbSet<Provider> Providers => Set<Provider>();
+    public DbSet<ProviderCredential> ProviderCredentials => Set<ProviderCredential>();
+    public DbSet<ProviderRefreshSession> ProviderRefreshSessions => Set<ProviderRefreshSession>();
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<Review> Reviews => Set<Review>();
     public DbSet<ContentBlock> ContentBlocks => Set<ContentBlock>();
@@ -35,6 +37,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<Provider>().Property(x => x.Version).IsRowVersion();
         b.Entity<Provider>().HasOne(x => x.Agency).WithMany().HasForeignKey(x => x.AgencyId).OnDelete(DeleteBehavior.Restrict);
         b.Entity<Provider>().HasOne(x => x.Village).WithMany().HasForeignKey(x => x.VillageId).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<ProviderCredential>().HasKey(x => x.ProviderId);
+        b.Entity<ProviderCredential>().HasOne(x => x.Provider).WithOne(x => x.Credential).HasForeignKey<ProviderCredential>(x => x.ProviderId).OnDelete(DeleteBehavior.Cascade);
+        b.Entity<ProviderCredential>().HasIndex(x => x.Email).IsUnique();
+        b.Entity<ProviderRefreshSession>().HasOne(x => x.Provider).WithMany().HasForeignKey(x => x.ProviderId).OnDelete(DeleteBehavior.Cascade);
+        b.Entity<ProviderRefreshSession>().HasIndex(x => x.TokenHash).IsUnique();
         b.Entity<ProviderCategory>().HasKey(x => new { x.ProviderId, x.ServiceCategoryId });
         b.Entity<ProviderCategory>().HasOne(x => x.ServiceCategory).WithMany().HasForeignKey(x => x.ServiceCategoryId).OnDelete(DeleteBehavior.Restrict);
         b.Entity<ProviderSkill>().HasKey(x => new { x.ProviderId, x.SkillName });
@@ -81,6 +88,9 @@ public class AuthRepository(AppDbContext db) : IAuthRepository
     public Task<User?> FindGoogleAsync(string sub, CancellationToken ct) => db.ExternalLogins.Where(x => x.Provider == "Google" && x.ProviderKey == sub).Select(x => x.User).SingleOrDefaultAsync(ct);
     public async Task<User?> FindAdminAsync(string email, CancellationToken ct) => await db.AdminAccounts.SingleOrDefaultAsync(x => x.Email == email, ct);
     public Task<User?> FindUserAsync(Guid id, CancellationToken ct) => db.Users.SingleOrDefaultAsync(x => x.Id == id, ct);
+    public Task<ProviderCredential?> FindProviderCredentialAsync(string email, CancellationToken ct) => db.ProviderCredentials.Include(x => x.Provider).SingleOrDefaultAsync(x => x.Email == email, ct);
+    public Task<ProviderCredential?> FindProviderCredentialByProviderAsync(Guid providerId, CancellationToken ct) => db.ProviderCredentials.Include(x => x.Provider).SingleOrDefaultAsync(x => x.ProviderId == providerId, ct);
+    public Task<Provider?> FindProviderAsync(Guid id, CancellationToken ct) => db.Providers.SingleOrDefaultAsync(x => x.Id == id, ct);
     public async Task<bool> CanAuthenticateAsync(User user, CancellationToken ct) => user.Role switch
     {
         UserRole.Customer => user is not AdminAccount,
@@ -88,14 +98,22 @@ public class AuthRepository(AppDbContext db) : IAuthRepository
         UserRole.AgencyAdmin => user is AdminAccount admin && admin.AgencyId != null && await db.Agencies.AnyAsync(a => a.Id == admin.AgencyId && a.Status == AgencyStatus.Approved, ct),
         _ => false
     };
+    public Task<bool> CanAuthenticateProviderAsync(Guid providerId, CancellationToken ct) => db.Providers.AnyAsync(p => p.Id == providerId && p.Credential != null && (p.AgencyId == null || p.Agency!.Status == AgencyStatus.Approved), ct);
     public Task<bool> EmailExistsAsync(string email, CancellationToken ct) => db.Users.AnyAsync(x => x.Email == email, ct);
     public void AddUser(User user, ExternalLogin? login = null) { db.Users.Add(user); if (login is not null) db.ExternalLogins.Add(login); }
     public void AddSession(RefreshSession session) => db.RefreshSessions.Add(session);
+    public void AddProviderSession(ProviderRefreshSession session) => db.ProviderRefreshSessions.Add(session);
     public async Task<RefreshSession?> ConsumeSessionAsync(string hash, CancellationToken ct)
     {
         var now = DateTimeOffset.UtcNow;
         var changed = await db.RefreshSessions.Where(x => x.TokenHash == hash && x.RevokedAt == null && x.ExpiresAt > now).ExecuteUpdateAsync(s => s.SetProperty(x => x.RevokedAt, now), ct);
         return changed == 1 ? await db.RefreshSessions.Include(x => x.User).SingleAsync(x => x.TokenHash == hash, ct) : null;
+    }
+    public async Task<ProviderRefreshSession?> ConsumeProviderSessionAsync(string hash, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var changed = await db.ProviderRefreshSessions.Where(x => x.TokenHash == hash && x.RevokedAt == null && x.ExpiresAt > now).ExecuteUpdateAsync(s => s.SetProperty(x => x.RevokedAt, now), ct);
+        return changed == 1 ? await db.ProviderRefreshSessions.Include(x => x.Provider).ThenInclude(x => x.Credential).SingleAsync(x => x.TokenHash == hash, ct) : null;
     }
     public async Task SaveAsync(CancellationToken ct) { await db.SaveChangesAsync(ct); }
 }

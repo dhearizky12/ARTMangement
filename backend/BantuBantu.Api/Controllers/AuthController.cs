@@ -16,10 +16,19 @@ public class AuthController(IAuthService auth) : ControllerBase
     public async Task<ActionResult<AuthResponse>> Google(GoogleRequest request, CancellationToken ct) => Respond(await auth.GoogleAsync(request.Credential, ct));
     [HttpPost("admin/login")]
     public async Task<ActionResult<AuthResponse>> Admin(AdminRequest request, CancellationToken ct) => Respond(await auth.AdminAsync(request.Email, request.Password, ct));
+    [HttpPost("provider/login")]
+    public async Task<ActionResult<AuthResponse>> Provider(ProviderLoginRequest request, CancellationToken ct) => Respond(await auth.ProviderAsync(request.Email, request.Password, ct));
     [HttpPost("refresh")]
     public async Task<ActionResult<AuthResponse>> Refresh(RefreshRequest request, CancellationToken ct) => Respond(await auth.RefreshAsync(request.RefreshToken, ct));
     [HttpPost("logout")]
     public async Task<IActionResult> Logout(RefreshRequest request, CancellationToken ct) { await auth.LogoutAsync(request.RefreshToken, ct); return NoContent(); }
+    [Authorize(Roles = "Provider"), HttpPost("provider/change-password")]
+    public async Task<IActionResult> ChangeProviderPassword(ChangePasswordRequest request, CancellationToken ct)
+    {
+        if (!Guid.TryParse(User.FindFirst("providerId")?.Value, out var providerId)) return Unauthorized();
+        await auth.ChangeProviderPasswordAsync(providerId, request.CurrentPassword, request.NewPassword, ct);
+        return NoContent();
+    }
     [Authorize, HttpGet("me")]
     public async Task<ActionResult<UserDto>> Me(CancellationToken ct)
     {

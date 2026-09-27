@@ -1,4 +1,4 @@
-export type Role = "Customer" | "PlatformAdmin" | "AgencyAdmin";
+export type Role = "Customer" | "PlatformAdmin" | "AgencyAdmin" | "Provider";
 export interface User {
   id: string;
   email: string;
@@ -78,6 +78,19 @@ export class AuthApi {
       password,
     });
     this.setSession(s);
+  }
+  async provider(email: string, password: string) {
+    const s = await this.request<Session>("/api/auth/provider/login", {
+      email,
+      password,
+    });
+    this.setSession(s);
+  }
+  async changeProviderPassword(currentPassword: string, newPassword: string) {
+    await this.post<void>("/api/auth/provider/change-password", {
+      currentPassword,
+      newPassword,
+    });
   }
   refresh(): Promise<Session> {
     const refreshToken = this.session?.refreshToken;

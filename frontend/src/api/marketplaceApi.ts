@@ -117,11 +117,23 @@ export const adminApi = {
   roster: () => authApi.get<ProviderAdmin[]>("/api/admin/providers"),
   provider: (id: string) =>
     authApi.get<ProviderAdmin>(`/api/admin/providers/${id}`),
-  draft: (agencyId: string | null) =>
-    authApi.post<ProviderAdmin>("/api/admin/providers", { agencyId }),
+  draft: (agencyId: string | null, email: string, password: string) =>
+    authApi.post<ProviderAdmin>("/api/admin/providers", {
+      agencyId,
+      email,
+      password,
+    }),
   saveProvider: (id: string, step: string, body: unknown) =>
     authApi.post<ProviderAdmin>(`/api/admin/providers/${id}/${step}`, body),
   agencies: () => authApi.get<Agency[]>("/api/admin/agencies"),
   categories: () => authApi.get<Category[]>("/api/admin/categories"),
   orders: () => authApi.get<Order[]>("/api/admin/orders"),
+};
+export const providerApi = {
+  profile: () => authApi.get<Provider>("/api/provider/profile"),
+  availability: (availability: Availability[]) =>
+    authApi.mutate<Provider>("/api/provider/availability", "PUT", {
+      availability,
+    }),
+  orders: () => authApi.get<Order[]>("/api/provider/orders"),
 };

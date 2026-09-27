@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AdminLayout } from "../components/admin/AdminLayout";
-import { Card, Button, Select, Badge } from "../components/ui";
+import { Card, Button, Input, Select, Badge } from "../components/ui";
 import { ResourceState } from "../components/ResourceState";
 import { useResource } from "../hooks/useResource";
 import { adminApi, type Agency } from "../api/marketplaceApi";
@@ -18,13 +18,19 @@ export function AdminDashboardPage() {
     "roster-agencies",
   );
   const [agencyId, setAgencyId] = useState("");
+  const [providerEmail, setProviderEmail] = useState("");
+  const [providerPassword, setProviderPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   async function create() {
     setBusy(true);
     setError("");
     try {
-      const draft = await adminApi.draft(agencyId || null);
+      const draft = await adminApi.draft(
+        agencyId || null,
+        providerEmail,
+        providerPassword,
+      );
       navigate(`/admin/providers/${draft.provider.id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Gagal membuat draft.");
@@ -55,7 +61,28 @@ export function AdminDashboardPage() {
         ) : (
           <p>Penyedia baru otomatis masuk ke roster agency Anda.</p>
         )}
-        <Button disabled={busy} onClick={create}>
+        <Input
+          label="Email login Provider"
+          type="email"
+          value={providerEmail}
+          onChange={(e) => setProviderEmail(e.target.value)}
+          autoComplete="off"
+          required
+        />
+        <Input
+          label="Kata sandi awal Provider"
+          type="password"
+          value={providerPassword}
+          onChange={(e) => setProviderPassword(e.target.value)}
+          minLength={14}
+          maxLength={256}
+          autoComplete="new-password"
+          required
+        />
+        <Button
+          disabled={busy || !providerEmail || providerPassword.length < 14}
+          onClick={create}
+        >
           {busy ? "Membuat…" : "Buat draft penyedia"}
         </Button>
         {error && <p role="alert">{error}</p>}
