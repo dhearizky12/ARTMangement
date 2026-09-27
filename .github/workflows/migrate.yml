@@ -2,6 +2,12 @@ name: Apply database migrations
 
 on:
   workflow_dispatch:
+    inputs:
+      seed_accounts:
+        description: "Seed one configured demo account for each role after migrations"
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -34,3 +40,41 @@ jobs:
           dotnet ef database update \
             --project backend/BantuBantu.Infrastructure \
             --startup-project backend/BantuBantu.Api
+
+      - name: Seed demo accounts (optional)
+        if: ${{ inputs.seed_accounts }}
+        env:
+          SeedAccounts__PlatformAdmin__Email: ${{ secrets.SEED_ACCOUNTS_PLATFORM_ADMIN_EMAIL }}
+          SeedAccounts__PlatformAdmin__Password: ${{ secrets.SEED_ACCOUNTS_PLATFORM_ADMIN_PASSWORD }}
+          SeedAccounts__AgencyAdmin__Email: ${{ secrets.SEED_ACCOUNTS_AGENCY_ADMIN_EMAIL }}
+          SeedAccounts__AgencyAdmin__Password: ${{ secrets.SEED_ACCOUNTS_AGENCY_ADMIN_PASSWORD }}
+          SeedAccounts__AgencyAdmin__FullName: ${{ secrets.SEED_ACCOUNTS_AGENCY_ADMIN_FULL_NAME }}
+          SeedAccounts__Agency__Name: ${{ secrets.SEED_ACCOUNTS_AGENCY_NAME }}
+          SeedAccounts__Agency__ContactInfo: ${{ secrets.SEED_ACCOUNTS_AGENCY_CONTACT_INFO }}
+          SeedAccounts__Provider__Email: ${{ secrets.SEED_ACCOUNTS_PROVIDER_EMAIL }}
+          SeedAccounts__Provider__Password: ${{ secrets.SEED_ACCOUNTS_PROVIDER_PASSWORD }}
+          SeedAccounts__Provider__FullName: ${{ secrets.SEED_ACCOUNTS_PROVIDER_FULL_NAME }}
+          SeedAccounts__Customer__Email: ${{ secrets.SEED_ACCOUNTS_CUSTOMER_EMAIL }}
+          SeedAccounts__Customer__FullName: ${{ secrets.SEED_ACCOUNTS_CUSTOMER_FULL_NAME }}
+          SeedAccounts__Customer__GoogleSubject: ${{ secrets.SEED_ACCOUNTS_CUSTOMER_GOOGLE_SUBJECT }}
+        run: |
+          for key in \
+            SeedAccounts__PlatformAdmin__Email \
+            SeedAccounts__PlatformAdmin__Password \
+            SeedAccounts__AgencyAdmin__Email \
+            SeedAccounts__AgencyAdmin__Password \
+            SeedAccounts__AgencyAdmin__FullName \
+            SeedAccounts__Agency__Name \
+            SeedAccounts__Agency__ContactInfo \
+            SeedAccounts__Provider__Email \
+            SeedAccounts__Provider__Password \
+            SeedAccounts__Provider__FullName \
+            SeedAccounts__Customer__Email \
+            SeedAccounts__Customer__FullName \
+            SeedAccounts__Customer__GoogleSubject; do
+            if [ -z "${!key}" ]; then
+              echo "Missing GitHub secret for $key" >&2
+              exit 1
+            fi
+          done
+          dotnet run --project backend/BantuBantu.Api --no-launch-profile -- --seed-accounts
