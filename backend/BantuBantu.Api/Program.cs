@@ -44,6 +44,7 @@ builder.Services.AddScoped<IAuthRepository, AuthRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddSingleton<IGoogleIdentityVerifier, GoogleIdentityVerifier>();
 builder.Services.AddSingleton<IPasswordService, PasswordService>();
+builder.Services.AddScoped<DemoAccountSeeder>();
 builder.Services.AddSingleton<RsaKeys>();
 builder.Services.AddSingleton<ITokenService, TokenService>();
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.SetIsOriginAllowed(originPolicy.IsAllowed).AllowAnyHeader().AllowAnyMethod()));
@@ -71,6 +72,13 @@ if (args.Contains("--seed-admin"))
     var user = new AdminAccount { Email = email, FullName = "Administrator", Role = UserRole.PlatformAdmin, ProfileCompleted = true };
     user.PasswordHash = scope.ServiceProvider.GetRequiredService<IPasswordService>().Hash(user, password);
     repository.AddUser(user); await repository.SaveAsync(default); return;
+}
+if (args.Contains("--seed-accounts"))
+{
+    using var scope = app.Services.CreateScope();
+    var options = DemoAccountSeedOptions.FromConfiguration(builder.Configuration);
+    await scope.ServiceProvider.GetRequiredService<DemoAccountSeeder>().SeedAsync(options);
+    return;
 }
 app.UseExceptionHandler();
 app.Use(async (context, next) =>
