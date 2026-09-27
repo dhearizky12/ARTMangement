@@ -16,11 +16,11 @@ export function AccountPage() {
             <h2>{session.user.fullName}</h2>
             <p>{session.user.email}</p>
             <p>{session.user.role}</p>
-            {session.user.role !== "Customer" && (
-              <Link className="text-link" to="/admin">
-                Buka ruang kelola
-              </Link>
-            )}
+            {session.user.role === "Provider" ? (
+              <Link className="text-link" to="/provider/dashboard">Buka panel Provider</Link>
+            ) : session.user.role !== "Customer" ? (
+              <Link className="text-link" to="/admin">Buka ruang kelola</Link>
+            ) : null}
             <Button
               variant="secondary"
               onClick={() => authApi.logout().catch((e) => setError(e.message))}
@@ -41,6 +41,12 @@ export function AccountPage() {
               </Link>
               <Link className="text-link" to="/admin/login">
                 Login admin
+              </Link>
+              <Link className="text-link" to="/provider/login">
+                Login penyedia jasa
+              </Link>
+              <Link className="text-link" to="/provider/register">
+                Daftar sebagai penyedia jasa
               </Link>
             </div>
           </>

@@ -5,13 +5,14 @@ namespace BantuBantu.Application;
 public record GoogleRequest([Required, MaxLength(10000)] string Credential);
 public record AdminRequest([Required, EmailAddress] string Email, [Required, MaxLength(256)] string Password);
 public record ProviderLoginRequest([Required, EmailAddress] string Email, [Required, MaxLength(256)] string Password);
+public record ProviderRegistrationRequest([Required, EmailAddress] string Email, [Required, StringLength(256, MinimumLength = 14)] string Password, [Required, StringLength(256, MinimumLength = 14)] string ConfirmPassword);
 public record ChangePasswordRequest([Required, MaxLength(256)] string CurrentPassword, [Required, StringLength(256, MinimumLength = 14)] string NewPassword);
 public record RefreshRequest([Required, MaxLength(256)] string RefreshToken);
 public record GoogleIdentity(string Sub, string Email, string Name, string? Picture, string Json);
-public record UserDto(Guid Id, string Email, string FullName, string? PictureUrl, string Role, bool ProfileCompleted, string ProfileStep, Guid? AgencyId = null)
+public record UserDto(Guid Id, string Email, string FullName, string? PictureUrl, string Role, bool ProfileCompleted, string ProfileStep, Guid? AgencyId = null, string? ApplicationStatus = null)
 {
     public static UserDto From(User u) => new(u.Id, u.Email, u.FullName, u.PictureUrl, u.Role.ToString(), u.ProfileCompleted, u.ProfileCompleted ? "done" : u.ProfileStep, (u as AdminAccount)?.AgencyId);
-    public static UserDto FromProvider(Provider p, string email) => new(p.Id, email, p.FullName, null, UserRole.Provider.ToString(), true, "done");
+    public static UserDto FromProvider(Provider p, string email) => new(p.Id, email, p.FullName, null, UserRole.Provider.ToString(), true, "done", null, p.ApplicationStatus.ToString());
 }
 public record AccessToken(string Value, DateTimeOffset ExpiresAt);
 public record AuthResponse(string AccessToken, DateTimeOffset ExpiresAt, UserDto User, string RefreshToken, DateTimeOffset RefreshExpiresAt);
@@ -44,6 +45,7 @@ public interface IAuthRepository
     Task<bool> CanAuthenticateAsync(User user, CancellationToken ct);
     Task<bool> CanAuthenticateProviderAsync(Guid providerId, CancellationToken ct);
     Task<bool> EmailExistsAsync(string email, CancellationToken ct);
+    void AddProvider(Provider provider);
     void AddUser(User user, ExternalLogin? login = null);
     void AddSession(RefreshSession session);
     void AddProviderSession(ProviderRefreshSession session);
@@ -55,6 +57,7 @@ public interface IAuthService
 {
     Task<AuthResult> GoogleAsync(string credential, CancellationToken ct);
     Task<AuthResult> AdminAsync(string email, string password, CancellationToken ct);
+    Task<AuthResult> RegisterProviderAsync(string email, string password, string confirmPassword, CancellationToken ct);
     Task<AuthResult> ProviderAsync(string email, string password, CancellationToken ct);
     Task ChangeProviderPasswordAsync(Guid providerId, string currentPassword, string newPassword, CancellationToken ct);
     Task<AuthResult> RefreshAsync(string token, CancellationToken ct);
@@ -81,6 +84,18 @@ public class AuthService(IAuthRepository repository, IGoogleIdentityVerifier goo
         var user = await repository.FindAdminAsync(email.Trim().ToLowerInvariant(), ct);
         if (!passwords.Verify(user as AdminAccount ?? new AdminAccount(), password) || user is null) throw new AuthenticationFailedException();
         return await IssueAsync(user, ct);
+    }
+    public async Task<AuthResult> RegisterProviderAsync(string email, string password, string confirmPassword, CancellationToken ct)
+    {
+        if (password != confirmPassword) throw new ProfileException("Konfirmasi kata sandi tidak sama.");
+        var normalized = email.Trim().ToLowerInvariant();
+        if (await repository.EmailExistsAsync(normalized, ct) || await repository.FindProviderCredentialAsync(normalized, ct) is not null)
+            throw new ProfileException("Email sudah terdaftar.", 409);
+        var provider = new Provider { ApplicationStatus = ProviderApplicationStatus.Draft };
+        provider.Credential = new ProviderCredential { ProviderId = provider.Id, Provider = provider, Email = normalized, PasswordHash = passwords.HashProvider(password) };
+        repository.AddProvider(provider);
+        await repository.SaveAsync(ct);
+        return await IssueProviderAsync(provider.Credential, ct);
     }
     public async Task<AuthResult> ProviderAsync(string email, string password, CancellationToken ct)
     {

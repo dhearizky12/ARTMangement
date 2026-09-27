@@ -107,6 +107,7 @@ Semua route autentikasi dibatasi 20 request/menit per alamat IP. Akses API memak
 |---|---|---|
 | POST | `/api/auth/google` | `{ "credential": "GOOGLE_ID_TOKEN" }` |
 | POST | `/api/auth/admin/login` | `{ "email": "...", "password": "..." }` |
+| POST | `/api/auth/provider/register` | `{ "email": "...", "password": "...", "confirmPassword": "..." }` |
 | POST | `/api/auth/provider/login` | `{ "email": "...", "password": "..." }` |
 | POST | `/api/auth/provider/change-password` | Provider Bearer token; `{ "currentPassword": "...", "newPassword": "..." }` |
 | POST | `/api/auth/refresh` | `{ "refreshToken": "..." }` |
@@ -115,8 +116,19 @@ Semua route autentikasi dibatasi 20 request/menit per alamat IP. Akses API memak
 | GET | `/api/user/dashboard` | Role Customer |
 | GET | `/api/admin/dashboard` | Role PlatformAdmin atau AgencyAdmin |
 | GET | `/api/provider/profile` | Role Provider; profil Provider sendiri |
+| GET | `/api/provider/application/status` | Role Provider; status dan tahap aplikasi sendiri |
+| POST | `/api/provider/application/submit` | Role Provider; kirim aplikasi untuk moderasi |
+| POST | `/api/provider/personal-info` | Role Provider; personal info sendiri |
+| POST | `/api/provider/address` | Role Provider; alamat sendiri |
+| POST | `/api/provider/profile` | Role Provider; layanan dan ketersediaan sendiri |
+| POST | `/api/provider/documents` | Role Provider; KTP/KK sendiri |
 | PUT | `/api/provider/availability` | Role Provider; ketersediaan Provider sendiri |
 | GET | `/api/provider/orders` | Role Provider; order yang ditugaskan ke Provider sendiri |
+| GET | `/api/admin/providers/applications` | Admin; aplikasi Provider sesuai scope |
+| POST | `/api/admin/providers/{id}/approve` | Admin; setujui aplikasi |
+| POST | `/api/admin/providers/{id}/reject` | Admin; tolak dengan alasan |
+| POST | `/api/admin/providers/{id}/request-changes` | Admin; minta perbaikan |
+| POST | `/api/admin/providers/{id}/suspend` | Admin; tangguhkan akun |
 | GET | `/.well-known/jwks.json` | Public RSA key saja |
 | GET | `/health` | Liveness, tidak memeriksa koneksi database |
 
@@ -126,7 +138,7 @@ JWT memuat `sub`, `email`, `role`, `profileCompleted`, `jti`, `exp`, `nbf`, `iss
 
 Google verifier memvalidasi signature, audience, issuer, expiry melalui Google.Apis.Auth dan mewajibkan email terverifikasi. Akun dicocokkan dengan `sub`, role selalu Customer; kesamaan email dengan akun lain ditolak dan tidak otomatis ditautkan. Data identitas Google awal disimpan sebagai JSONB beserta email/nama/foto/sub. Tidak ada redirect/callback server karena GIS popup memberikan credential langsung ke frontend.
 
-Provider dibuat admin melalui `POST /api/admin/providers` dengan `agencyId`, `email`, dan password awal minimal 14 karakter. Email disimpan di `ProviderCredentials`, password memakai ASP.NET Identity PasswordHasher yang sama dengan admin. Provider login menghasilkan role `Provider` dan claim `providerId`; repository scope membatasi profil, ketersediaan, dan order ke Provider tersebut. Belum ada alur lupa password/email reset.
+Provider dapat mendaftar melalui `POST /api/auth/provider/register`; akun baru berstatus `Draft`, otomatis menjadi direct talent tanpa agency, dan dapat melengkapi onboarding dari panel Provider. Admin tetap dapat membuat Provider langsung melalui `POST /api/admin/providers`, misalnya untuk talent internal. Aplikasi yang dikirim memiliki status `Submitted`, `NeedsChanges`, `Approved`, `Rejected`, atau `Suspended`; hanya Provider `Approved` dengan `VerificationStatus=Verified` yang tampil di marketplace. Platform Admin melihat semua aplikasi, sedangkan Agency Admin hanya melihat roster agency-nya. Email disimpan di `ProviderCredentials`, password memakai ASP.NET Identity PasswordHasher yang sama dengan admin. Provider login menghasilkan role `Provider` dan claim `providerId`; repository scope membatasi profil, ketersediaan, dan order ke Provider tersebut. Belum ada alur verifikasi email atau lupa password/email reset karena layanan email belum dikonfigurasi.
 
 Private key dibaca dari path konfigurasi atau Base64 PEM; mount dari secret manager dengan permission terbatas.
 

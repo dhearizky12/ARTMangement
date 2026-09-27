@@ -15,6 +15,7 @@ export interface FormProps {
   data: ProviderAdmin;
   save: (step: string, body: unknown) => Promise<void>;
   busy: boolean;
+  downloadDocument?: (id: string) => Promise<Blob>;
 }
 export function PersonalForm({ data, save, busy }: FormProps) {
   const p = data.provider;
@@ -127,7 +128,7 @@ export function ProviderAddressForm({ data, save, busy }: FormProps) {
     </form>
   );
 }
-export function DocumentsForm({ data, save, busy }: FormProps) {
+export function DocumentsForm({ data, save, busy, downloadDocument }: FormProps) {
   const [error, setError] = useState("");
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -146,9 +147,9 @@ export function DocumentsForm({ data, save, busy }: FormProps) {
   }
   async function download(id: string) {
     try {
-      const blob = await authApi.download(
-        `/api/admin/providers/${data.provider.id}/documents/${id}`,
-      );
+      const blob = await (downloadDocument
+        ? downloadDocument(id)
+        : authApi.download(`/api/admin/providers/${data.provider.id}/documents/${id}`));
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;

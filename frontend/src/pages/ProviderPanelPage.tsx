@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { Badge, Button, Card, Input } from "../components/ui";
 import { ResourceState } from "../components/ResourceState";
 import { ProviderLayout } from "../components/provider/ProviderLayout";
@@ -74,10 +75,20 @@ export function ProviderPanelPage() {
           <Card lifted>
             <div className="section-title">
               <h2>Profil Anda</h2>
-              <Badge tone={p.verificationStatus === "Verified" ? "success" : "accent"}>
-                {p.verificationStatus}
-              </Badge>
+              <div className="tags">
+                <Badge tone={p.applicationStatus === "Approved" ? "success" : "accent"}>{p.applicationStatus}</Badge>
+                <Badge tone={p.verificationStatus === "Verified" ? "success" : "accent"}>{p.verificationStatus}</Badge>
+              </div>
             </div>
+            {p.applicationStatus === "Draft" || p.applicationStatus === "NeedsChanges" ? (
+              <p><Link className="btn btn-secondary" to="/provider/onboarding">Lengkapi aplikasi</Link></p>
+            ) : p.applicationStatus === "Submitted" ? (
+              <p className="muted">Aplikasi Anda sedang ditinjau oleh admin.</p>
+            ) : p.applicationStatus === "Rejected" ? (
+              <p className="error">Aplikasi ditolak. Catatan admin: {p.moderationNote || "Silakan hubungi admin."}</p>
+            ) : p.applicationStatus === "Suspended" ? (
+              <p className="error">Akun Provider sedang ditangguhkan.</p>
+            ) : null}
             <p>{p.bio || "Bio belum diisi oleh admin."}</p>
             <div className="tags">
               {p.categories.map((category) => <Badge key={category.id}>{category.name}</Badge>)}

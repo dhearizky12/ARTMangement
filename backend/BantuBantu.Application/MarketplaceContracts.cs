@@ -20,11 +20,13 @@ public record OrderStatusRequest([EnumDataType(typeof(OrderStatus))] OrderStatus
 public record ReviewRequest([Range(1, 5)] int Rating, [Required, StringLength(2000, MinimumLength = 3)] string Comment);
 public record CategorySummary(Guid Id, string Name);
 public record ReviewDto(int Rating, string Comment, DateTimeOffset CreatedAt);
-public record ProviderDto(Guid Id, Guid? AgencyId, string? AgencyName, string FullName, int Age, string Bio, int YearsOfExperience, int JobsCompletedCount, PricingType PricingType, decimal Price, VerificationStatus VerificationStatus, bool IdentityVerified, bool BackgroundCheckPassed, bool ContractSigned, string? Location, CategorySummary[] Categories, string[] Skills, string[] Languages, AvailabilityRequest[] Availability, double? Rating, int ReviewCount, ReviewDto[] Reviews);
+public record ProviderDto(Guid Id, Guid? AgencyId, string? AgencyName, string FullName, int Age, string Bio, int YearsOfExperience, int JobsCompletedCount, PricingType PricingType, decimal Price, VerificationStatus VerificationStatus, bool IdentityVerified, bool BackgroundCheckPassed, bool ContractSigned, string? Location, CategorySummary[] Categories, string[] Skills, string[] Languages, AvailabilityRequest[] Availability, double? Rating, int ReviewCount, ReviewDto[] Reviews, ProviderApplicationStatus ApplicationStatus = ProviderApplicationStatus.Draft, string? ModerationNote = null);
 public record ProviderDocumentDto(Guid Id, string DocumentType, DateTimeOffset UploadedAt);
 public record ProviderAdminDto(ProviderDto Provider, string Step, string? VillageId, string AddressDetail, string PostalCode, ProviderDocumentDto[] Documents);
+public record ProviderApplicationDto(ProviderAdminDto Provider, ProviderApplicationStatus Status, string Step, string? Note, DateTimeOffset? SubmittedAt, bool CanEdit);
 public record ProviderPage(int Total, int Page, int PageSize, ProviderDto[] Items);
 public record OrderDto(Guid Id, Guid ProviderId, string ProviderName, OrderStatus Status, DateOnly ScheduledDate, decimal Price, PricingType PricingType, string AddressDetail, string VillageId, bool Reviewed);
+public record ProviderModerationRequest([StringLength(1000)] string? Note);
 public interface IMarketplaceRepository
 {
     Task<(int Total, List<Provider> Items)> BrowseAsync(string? q, Guid? category, string? villageId, int page, int pageSize, CancellationToken ct);

@@ -28,7 +28,7 @@ Frontend menyimpan access token dan refresh token hanya di memori, lalu mengirim
 3. Klik `Masuk & Pesan` dari detail provider. Setelah Google login, Customer kembali ke detail lalu mengisi tanggal serta lokasi layanan.
 4. `/admin/login` membuka area admin. Platform Admin membuat agency/provider; Agency Admin hanya melihat roster agency yang ada di claim `agencyId`.
 5. `/admin/providers/:id` menjalankan personal, alamat, KTP/KK, layanan, dan checklist verifikasi. Status tahap disimpan server dan aman saat reload.
-6. `/provider/login` membuka panel Provider. Provider dapat melihat profil, mengganti ketersediaan mingguan, melihat order yang ditugaskan, dan mengganti kata sandi.
+6. `/provider/register` membuka pendaftaran Provider mandiri. Setelah akun dibuat, Provider diarahkan ke `/provider/onboarding` untuk mengisi personal, alamat, dokumen, layanan, dan mengirim aplikasi untuk moderasi. `/provider/login` membuka panel Provider; Provider dapat melihat status aplikasi, ketersediaan mingguan, order yang ditugaskan, dan mengganti kata sandi.
 7. Refresh token dikirim di body JSON; JWT memakai RS256 dan public key tersedia di JWKS API.
 
 Bottom navigation membuka Beranda, Cari, Pesanan, dan Akun. Customer tidak memiliki wizard onboarding wajib; alamat layanan tersimpan pada Order.
