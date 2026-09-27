@@ -76,6 +76,7 @@ export function ProviderLoginPage() {
           </fieldset>
         </form>
         <div className="login-actions">
+          <Link className="text-link" to="/provider/register">Daftar sebagai Provider</Link>
           <Link className="text-link" to="/login">Login sebagai Customer</Link>
           <Link className="text-link" to="/admin/login">Login admin</Link>
         </div>

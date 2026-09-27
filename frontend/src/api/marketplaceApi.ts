@@ -1,6 +1,13 @@
 import { authApi } from "./authApi";
 export type PricingType = "PerVisit" | "PerMonth";
 export type VerificationStatus = "Pending" | "Verified" | "Rejected";
+export type ProviderApplicationStatus =
+  | "Draft"
+  | "Submitted"
+  | "NeedsChanges"
+  | "Approved"
+  | "Rejected"
+  | "Suspended";
 export const days = [
   "Sunday",
   "Monday",
@@ -46,6 +53,8 @@ export interface Provider {
   rating: number | null;
   reviewCount: number;
   reviews: { rating: number; comment: string; createdAt: string }[];
+  applicationStatus: ProviderApplicationStatus;
+  moderationNote: string | null;
 }
 export interface ProviderAdmin {
   provider: Provider;
@@ -95,6 +104,14 @@ export interface ProviderPage {
   pageSize: number;
   items: Provider[];
 }
+export interface ProviderApplication {
+  provider: ProviderAdmin;
+  status: ProviderApplicationStatus;
+  step: ProviderAdmin["step"];
+  note: string | null;
+  submittedAt: string | null;
+  canEdit: boolean;
+}
 export const money = (price: number) =>
   new Intl.NumberFormat("id-ID", {
     style: "currency",
@@ -128,9 +145,20 @@ export const adminApi = {
   agencies: () => authApi.get<Agency[]>("/api/admin/agencies"),
   categories: () => authApi.get<Category[]>("/api/admin/categories"),
   orders: () => authApi.get<Order[]>("/api/admin/orders"),
+  applications: (status = "Submitted") =>
+    authApi.get<ProviderAdmin[]>(`/api/admin/providers/applications?status=${status}`),
+  moderate: (id: string, action: "approve" | "reject" | "request-changes" | "suspend", note?: string) =>
+    authApi.post<ProviderAdmin>(`/api/admin/providers/${id}/${action}`, { note }),
 };
 export const providerApi = {
   profile: () => authApi.get<Provider>("/api/provider/profile"),
+  application: () => authApi.get<ProviderApplication>("/api/provider/application/status"),
+  submit: () => authApi.post<ProviderApplication>("/api/provider/application/submit", {}),
+  personal: (body: unknown) => authApi.post<ProviderAdmin>("/api/provider/personal-info", body),
+  address: (body: unknown) => authApi.post<ProviderAdmin>("/api/provider/address", body),
+  profileDetails: (body: unknown) => authApi.post<ProviderAdmin>("/api/provider/profile", body),
+  documents: (body: FormData) => authApi.post<ProviderAdmin>("/api/provider/documents", body),
+  downloadDocument: (id: string) => authApi.download(`/api/provider/documents/${id}`),
   availability: (availability: Availability[]) =>
     authApi.mutate<Provider>("/api/provider/availability", "PUT", {
       availability,

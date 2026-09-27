@@ -16,6 +16,8 @@ public class AuthController(IAuthService auth) : ControllerBase
     public async Task<ActionResult<AuthResponse>> Google(GoogleRequest request, CancellationToken ct) => Respond(await auth.GoogleAsync(request.Credential, ct));
     [HttpPost("admin/login")]
     public async Task<ActionResult<AuthResponse>> Admin(AdminRequest request, CancellationToken ct) => Respond(await auth.AdminAsync(request.Email, request.Password, ct));
+    [HttpPost("provider/register")]
+    public async Task<ActionResult<AuthResponse>> RegisterProvider(ProviderRegistrationRequest request, CancellationToken ct) => Respond(await auth.RegisterProviderAsync(request.Email, request.Password, request.ConfirmPassword, ct));
     [HttpPost("provider/login")]
     public async Task<ActionResult<AuthResponse>> Provider(ProviderLoginRequest request, CancellationToken ct) => Respond(await auth.ProviderAsync(request.Email, request.Password, ct));
     [HttpPost("refresh")]

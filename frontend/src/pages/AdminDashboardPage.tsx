@@ -10,6 +10,7 @@ export function AdminDashboardPage() {
   const { session } = useAuth();
   const navigate = useNavigate();
   const roster = useResource(adminApi.roster, "roster");
+  const applications = useResource(adminApi.applications, "provider-applications");
   const agencies = useResource(
     () =>
       session?.user.role === "PlatformAdmin"
@@ -22,6 +23,7 @@ export function AdminDashboardPage() {
   const [providerPassword, setProviderPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [moderating, setModerating] = useState("");
   async function create() {
     setBusy(true);
     setError("");
@@ -36,6 +38,20 @@ export function AdminDashboardPage() {
       setError(e instanceof Error ? e.message : "Gagal membuat draft.");
     } finally {
       setBusy(false);
+    }
+  }
+  async function moderate(id: string, action: "approve" | "reject" | "request-changes" | "suspend") {
+    const note = action === "approve" ? undefined : window.prompt("Catatan untuk Provider:");
+    if (action !== "approve" && note === null) return;
+    setModerating(id);
+    setError("");
+    try {
+      await adminApi.moderate(id, action, note || undefined);
+      await Promise.all([applications.reload(), roster.reload()]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Moderasi gagal.");
+    } finally {
+      setModerating("");
     }
   }
   return (
@@ -86,6 +102,27 @@ export function AdminDashboardPage() {
           {busy ? "Membuat…" : "Buat draft penyedia"}
         </Button>
         {error && <p role="alert">{error}</p>}
+      </Card>
+      <Card>
+        <div className="section-title">
+          <h2>Aplikasi Provider</h2>
+          <Badge tone="accent">Menunggu moderasi</Badge>
+        </div>
+        <ResourceState {...applications} />
+        {applications.data?.length ? applications.data.map(({ provider: p, step }) => (
+          <div className="moderation-row" key={p.id}>
+            <div>
+              <h3>{p.fullName || "Profil belum lengkap"}</h3>
+              <p className="muted">Tahap: {step} · {p.applicationStatus}</p>
+            </div>
+            <div className="filter-chips">
+              <Link className="btn btn-ghost" to={`/admin/providers/${p.id}`}>Periksa</Link>
+              <Button disabled={moderating === p.id} onClick={() => void moderate(p.id, "approve")}>Setujui</Button>
+              <Button variant="secondary" disabled={moderating === p.id} onClick={() => void moderate(p.id, "request-changes")}>Minta perbaikan</Button>
+              <Button variant="ghost" disabled={moderating === p.id} onClick={() => void moderate(p.id, "reject")}>Tolak</Button>
+            </div>
+          </div>
+        )) : applications.data ? <p>Tidak ada aplikasi yang menunggu moderasi.</p> : null}
       </Card>
       <ResourceState {...roster} />
       <div className="provider-grid">

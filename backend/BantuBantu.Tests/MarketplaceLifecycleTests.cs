@@ -100,6 +100,18 @@ public partial class AuthIntegrationTests
         Assert.Equal(HttpStatusCode.NotFound, (await aClient.PostAsJsonAsync($"/api/admin/orders/{order.Id}/status", new OrderStatusRequest(OrderStatus.Completed), Json)).StatusCode);
         await Read<OrderDto>(await platform.PostAsJsonAsync($"/api/admin/orders/{order.Id}/status", new OrderStatusRequest(OrderStatus.Confirmed), Json));
         await Read<OrderDto>(await platform.PostAsJsonAsync($"/api/admin/orders/{order.Id}/status", new OrderStatusRequest(OrderStatus.Completed), Json));
+        var registeredProvider = await Read<AuthResponse>(await guest.PostAsJsonAsync("/api/auth/provider/register", new ProviderRegistrationRequest("self-register@example.test", "Provider-password-long-42!", "Provider-password-long-42!"), Json));
+        Assert.Equal("Provider", registeredProvider.User.Role);
+        using var selfProvider = factory.CreateClient(); selfProvider.DefaultRequestHeaders.Authorization = new("Bearer", registeredProvider.AccessToken);
+        Assert.Equal(ProviderApplicationStatus.Draft, (await Read<ProviderApplicationDto>(await selfProvider.GetAsync("/api/provider/application/status"))).Status);
+        await Read<ProviderAdminDto>(await selfProvider.PostAsJsonAsync("/api/provider/personal-info", personal, Json));
+        await Read<ProviderAdminDto>(await selfProvider.PostAsJsonAsync("/api/provider/address", address, Json));
+        foreach (var type in new[] { "KTP", "KK" }) { using var form = Form(type); await Read<ProviderAdminDto>(await selfProvider.PostAsync("/api/provider/documents", form)); }
+        await Read<ProviderAdminDto>(await selfProvider.PostAsJsonAsync("/api/provider/profile", profile, Json));
+        Assert.Equal(ProviderApplicationStatus.Submitted, (await Read<ProviderApplicationDto>(await selfProvider.PostAsync("/api/provider/application/submit", null))).Status);
+        Assert.Contains(await Read<ProviderAdminDto[]>(await platform.GetAsync("/api/admin/providers/applications")), x => x.Provider.Id == registeredProvider.User.Id);
+        await Read<ProviderAdminDto>(await platform.PostAsJsonAsync($"/api/admin/providers/{registeredProvider.User.Id}/approve", new ProviderModerationRequest(null), Json));
+        Assert.Equal(ProviderApplicationStatus.Approved, (await Read<ProviderApplicationDto>(await selfProvider.GetAsync("/api/provider/application/status"))).Status);
         var providerLoginResponse = await guest.PostAsJsonAsync("/api/auth/provider/login", new ProviderLoginRequest("direct-provider@example.test", "Provider-password-long-42!"), Json);
         var providerSession = await Read<AuthResponse>(providerLoginResponse);
         Assert.Equal("Provider", providerSession.User.Role);

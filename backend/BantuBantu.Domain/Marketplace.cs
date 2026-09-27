@@ -3,6 +3,7 @@ namespace BantuBantu.Domain;
 public enum AgencyStatus { Pending, Approved, Suspended }
 public enum PricingType { PerVisit, PerMonth }
 public enum VerificationStatus { Pending, Verified, Rejected }
+public enum ProviderApplicationStatus { Draft, Submitted, NeedsChanges, Approved, Rejected, Suspended }
 public enum OrderStatus { Pending, Confirmed, Completed, Cancelled }
 public class AdminAccount : User
 {
@@ -31,6 +32,11 @@ public class Provider
     public PricingType PricingType { get; set; }
     public decimal Price { get; set; }
     public VerificationStatus VerificationStatus { get; set; }
+    public ProviderApplicationStatus ApplicationStatus { get; set; } = ProviderApplicationStatus.Draft;
+    public string? ModerationNote { get; set; }
+    public DateTimeOffset? SubmittedAt { get; set; }
+    public DateTimeOffset? ReviewedAt { get; set; }
+    public Guid? ReviewedBy { get; set; }
     public bool IdentityVerified { get; set; }
     public bool BackgroundCheckPassed { get; set; }
     public bool ContractSigned { get; set; }

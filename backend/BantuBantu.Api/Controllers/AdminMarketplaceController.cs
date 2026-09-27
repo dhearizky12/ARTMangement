@@ -9,12 +9,17 @@ namespace BantuBantu.Api.Controllers;
 public class AdminMarketplaceController(ProviderService providers, AgencyService agencies, CatalogService catalog, OrderService orders) : ControllerBase
 {
     [HttpGet("providers")] public Task<ProviderAdminDto[]> Providers(CancellationToken ct) => providers.Roster(ct);
+    [HttpGet("providers/applications")] public Task<ProviderAdminDto[]> Applications(CancellationToken ct, [FromQuery] ProviderApplicationStatus? status = ProviderApplicationStatus.Submitted) => providers.Applications(status, ct);
     [HttpPost("providers")] public Task<ProviderAdminDto> Draft(DraftRequest request, CancellationToken ct) => providers.Draft(request, ct);
     [HttpGet("providers/{id:guid}")] public Task<ProviderAdminDto> Provider(Guid id, CancellationToken ct) => providers.AdminDetail(id, ct);
     [HttpPost("providers/{id:guid}/personal-info")] public Task<ProviderAdminDto> Personal(Guid id, ProviderPersonalRequest request, CancellationToken ct) => providers.Personal(id, request, ct);
     [HttpPost("providers/{id:guid}/address")] public Task<ProviderAdminDto> Address(Guid id, AddressRequest request, CancellationToken ct) => providers.Address(id, request, ct);
     [HttpPost("providers/{id:guid}/profile")] public Task<ProviderAdminDto> Profile(Guid id, ProviderProfileRequest request, CancellationToken ct) => providers.Profile(id, request, ct);
     [HttpPost("providers/{id:guid}/verify")] public Task<ProviderAdminDto> Verify(Guid id, VerifyRequest request, CancellationToken ct) => providers.Verify(id, request, ct);
+    [HttpPost("providers/{id:guid}/approve")] public Task<ProviderAdminDto> Approve(Guid id, ProviderModerationRequest request, CancellationToken ct) => providers.Moderate(id, ProviderApplicationStatus.Approved, request, ct);
+    [HttpPost("providers/{id:guid}/reject")] public Task<ProviderAdminDto> Reject(Guid id, ProviderModerationRequest request, CancellationToken ct) => providers.Moderate(id, ProviderApplicationStatus.Rejected, request, ct);
+    [HttpPost("providers/{id:guid}/request-changes")] public Task<ProviderAdminDto> RequestChanges(Guid id, ProviderModerationRequest request, CancellationToken ct) => providers.Moderate(id, ProviderApplicationStatus.NeedsChanges, request, ct);
+    [HttpPost("providers/{id:guid}/suspend")] public Task<ProviderAdminDto> Suspend(Guid id, ProviderModerationRequest request, CancellationToken ct) => providers.Moderate(id, ProviderApplicationStatus.Suspended, request, ct);
     [HttpPost("providers/{id:guid}/documents"), EnableRateLimiting("upload"), RequestSizeLimit(6 * 1024 * 1024)]
     public Task<ProviderAdminDto> Document(Guid id, [FromForm] string documentType, [FromForm] IFormFile file, CancellationToken ct) => Upload(id, documentType, file, ct);
     private async Task<ProviderAdminDto> Upload(Guid id, string type, IFormFile file, CancellationToken ct) { await using var stream = file.OpenReadStream(); return await providers.Document(id, type, stream, file.Length, file.ContentType, ct); }

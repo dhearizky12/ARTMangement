@@ -8,6 +8,7 @@ export interface User {
   agencyId?: string | null;
   profileCompleted: boolean;
   profileStep: "personal" | "address" | "documents" | "done";
+  applicationStatus?: "Draft" | "Submitted" | "NeedsChanges" | "Approved" | "Rejected" | "Suspended";
 }
 export interface Session {
   accessToken: string;
@@ -83,6 +84,14 @@ export class AuthApi {
     const s = await this.request<Session>("/api/auth/provider/login", {
       email,
       password,
+    });
+    this.setSession(s);
+  }
+  async registerProvider(email: string, password: string, confirmPassword: string) {
+    const s = await this.request<Session>("/api/auth/provider/register", {
+      email,
+      password,
+      confirmPassword,
     });
     this.setSession(s);
   }

@@ -32,6 +32,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<AdminAccount>().HasOne(x => x.Agency).WithMany().HasForeignKey(x => x.AgencyId).OnDelete(DeleteBehavior.Restrict);
         b.Entity<Agency>().Property(x => x.Status).HasConversion<string>();
         b.Entity<Provider>().Property(x => x.VerificationStatus).HasConversion<string>();
+        b.Entity<Provider>().Property(x => x.ApplicationStatus).HasConversion<string>();
         b.Entity<Provider>().Property(x => x.PricingType).HasConversion<string>();
         b.Entity<Provider>().Property(x => x.Price).HasPrecision(18, 2);
         b.Entity<Provider>().Property(x => x.Version).IsRowVersion();
@@ -91,6 +92,7 @@ public class AuthRepository(AppDbContext db) : IAuthRepository
     public Task<ProviderCredential?> FindProviderCredentialAsync(string email, CancellationToken ct) => db.ProviderCredentials.Include(x => x.Provider).SingleOrDefaultAsync(x => x.Email == email, ct);
     public Task<ProviderCredential?> FindProviderCredentialByProviderAsync(Guid providerId, CancellationToken ct) => db.ProviderCredentials.Include(x => x.Provider).SingleOrDefaultAsync(x => x.ProviderId == providerId, ct);
     public Task<Provider?> FindProviderAsync(Guid id, CancellationToken ct) => db.Providers.SingleOrDefaultAsync(x => x.Id == id, ct);
+    public void AddProvider(Provider provider) => db.Providers.Add(provider);
     public async Task<bool> CanAuthenticateAsync(User user, CancellationToken ct) => user.Role switch
     {
         UserRole.Customer => user is not AdminAccount,
@@ -98,7 +100,7 @@ public class AuthRepository(AppDbContext db) : IAuthRepository
         UserRole.AgencyAdmin => user is AdminAccount admin && admin.AgencyId != null && await db.Agencies.AnyAsync(a => a.Id == admin.AgencyId && a.Status == AgencyStatus.Approved, ct),
         _ => false
     };
-    public Task<bool> CanAuthenticateProviderAsync(Guid providerId, CancellationToken ct) => db.Providers.AnyAsync(p => p.Id == providerId && p.Credential != null && (p.AgencyId == null || p.Agency!.Status == AgencyStatus.Approved), ct);
+    public Task<bool> CanAuthenticateProviderAsync(Guid providerId, CancellationToken ct) => db.Providers.AnyAsync(p => p.Id == providerId && p.Credential != null && p.ApplicationStatus != ProviderApplicationStatus.Suspended && (p.AgencyId == null || p.Agency!.Status == AgencyStatus.Approved), ct);
     public Task<bool> EmailExistsAsync(string email, CancellationToken ct) => db.Users.AnyAsync(x => x.Email == email, ct);
     public void AddUser(User user, ExternalLogin? login = null) { db.Users.Add(user); if (login is not null) db.ExternalLogins.Add(login); }
     public void AddSession(RefreshSession session) => db.RefreshSessions.Add(session);

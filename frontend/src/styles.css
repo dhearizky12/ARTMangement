@@ -268,6 +268,20 @@ form .btn {
   align-items: center;
   gap: var(--space-3);
 }
+.moderation-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4) 0;
+  border-top: 2px solid var(--color-ink);
+}
+.moderation-row h3,
+.moderation-row p {
+  margin-bottom: 0;
+}
+.moderation-row .filter-chips {
+  margin: 0;
+}
 .page {
   width: 100%;
   max-width: var(--page-width);
