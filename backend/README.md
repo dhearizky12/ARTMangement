@@ -61,11 +61,8 @@ Isi konfigurasi via `dotnet user-secrets set 'Key' 'value' --project BantuBantu.
 | — | ASPNETCORE_URLS | Misalnya `http://localhost:5080` |
 | AdminSeed:Email | AdminSeed__Email | Hanya untuk perintah seed admin |
 | AdminSeed:Password | AdminSeed__Password | Hanya seed; minimal 14 karakter |
-| SeedAccounts:PlatformAdmin:Email / Password | SeedAccounts__PlatformAdmin__Email / `...__Password` | Kredensial Platform Admin demo; password minimal 14 karakter |
-| SeedAccounts:AgencyAdmin:Email / Password / FullName | SeedAccounts__AgencyAdmin__Email / `...__Password` / `...__FullName` | Kredensial Agency Admin demo |
-| SeedAccounts:Agency:Name / ContactInfo | SeedAccounts__Agency__Name / `...__ContactInfo` | Agency demo yang dibuat atau dicari dengan status Approved |
-| SeedAccounts:Provider:Email / Password / FullName | SeedAccounts__Provider__Email / `...__Password` / `...__FullName` | Kredensial Provider demo; password minimal 14 karakter |
-| SeedAccounts:Customer:Email / FullName / GoogleSubject | SeedAccounts__Customer__Email / `...__FullName` / `...__GoogleSubject` | Customer demo; `GoogleSubject` adalah claim `sub` dari akun Google yang digunakan |
+| SeedAccounts:SharedPassword | SeedAccounts__SharedPassword | Satu password bersama Platform Admin, Agency Admin, dan Provider; minimal 14 karakter |
+| SeedAccounts:Customer:GoogleSubject | SeedAccounts__Customer__GoogleSubject | Claim `sub` Google untuk Customer demo |
 
 Template key kosong: `BantuBantu.Api/appsettings.Example.json`. File ini tidak otomatis dimuat. Alternatif lokal: salin menjadi `appsettings.Development.json` yang sudah diabaikan git. Jangan gunakan `VITE_` untuk secret; nilai tersebut terlihat di browser.
 
@@ -104,15 +101,15 @@ dotnet run --project BantuBantu.Api
 
 Seed adalah perintah eksplisit sekali jalan, bukan endpoint publik atau seed otomatis saat startup. Perintah `--seed-admin` menolak email yang sudah ada dan tidak mempromosikannya. Password disimpan memakai ASP.NET Identity PasswordHasher (PBKDF2 dengan salt individual), bukan plaintext.
 
-Untuk membuat satu akun demo per role, isi `SeedAccounts` melalui user-secrets atau environment variables (`SeedAccounts__PlatformAdmin__Email`, dan seterusnya), lalu jalankan:
+Untuk membuat satu akun demo per role, isi `SeedAccounts:SharedPassword` dan `SeedAccounts:Customer:GoogleSubject` melalui user-secrets atau environment variables, lalu jalankan:
 
 ```sh
 dotnet run --project BantuBantu.Api -- --seed-accounts
 ```
 
-Seeder ini idempotent: akun yang sudah cocok dilewati dan konflik role/email dihentikan dengan error. Seeder membuat Platform Admin, Agency Admin pada agency demo berstatus Approved, Provider terverifikasi, dan Customer. Customer tetap login melalui Google OAuth; `SeedAccounts:Customer:GoogleSubject` harus berisi nilai `sub` Google dari akun yang dipakai. Tidak ada password Customer karena kontrak autentikasi Customer memang Google-only. Password tiga akun email/password wajib minimal 14 karakter dan tidak pernah ditulis ke source code.
+Seeder ini idempotent: akun yang sudah cocok dilewati dan konflik role/email dihentikan dengan error. Seeder memakai email dan nama demo statis yang berbeda untuk Platform Admin, Agency Admin, Provider, dan Customer. `SeedAccounts:SharedPassword` menjadi password yang sama untuk tiga role email/password; password tidak ditulis ke source code. Customer tetap login melalui Google OAuth; `SeedAccounts:Customer:GoogleSubject` harus berisi nilai `sub` Google dari akun yang dipakai.
 
-Workflow `.github/workflows/migrate.yml` menyediakan input manual `seed_accounts`. Jika dicentang, workflow menjalankan migrasi dengan `DATABASE_URL_UNPOOLED` terlebih dahulu, lalu menjalankan seeder dengan secret `SEED_ACCOUNTS_*`. Seeder mode tidak membutuhkan JWT, Google Client ID, CORS, atau storage secret karena tidak menyalakan HTTP server; workflow tetap hanya berjalan melalui `workflow_dispatch`.
+Workflow `.github/workflows/migrate.yml` menyediakan input manual `seed_accounts`. Jika dicentang, workflow menjalankan migrasi dengan `DATABASE_URL_UNPOOLED` terlebih dahulu, lalu menjalankan seeder dengan secret `SEED_ACCOUNTS_SHARED_PASSWORD` dan `SEED_ACCOUNTS_CUSTOMER_GOOGLE_SUBJECT`. Seeder mode tidak membutuhkan JWT, Google Client ID, CORS, atau storage secret karena tidak menyalakan HTTP server; workflow tetap hanya berjalan melalui `workflow_dispatch`.
 
 ## REST API
 

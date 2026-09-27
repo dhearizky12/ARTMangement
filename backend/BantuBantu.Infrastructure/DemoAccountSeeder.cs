@@ -30,19 +30,28 @@ public sealed record DemoAccountSeedOptions(
             return value;
         }
 
+        static string Optional(IConfiguration configuration, string key, string fallback) =>
+            string.IsNullOrWhiteSpace(configuration[key]) ? fallback : configuration[key]!.Trim();
+
+        static string Password(IConfiguration configuration, string roleKey)
+        {
+            var shared = configuration["SeedAccounts:SharedPassword"]?.Trim();
+            return string.IsNullOrWhiteSpace(shared) ? Required(configuration, roleKey) : shared;
+        }
+
         return new(
-            Required(configuration, "SeedAccounts:PlatformAdmin:Email"),
-            Required(configuration, "SeedAccounts:PlatformAdmin:Password"),
-            Required(configuration, "SeedAccounts:AgencyAdmin:Email"),
-            Required(configuration, "SeedAccounts:AgencyAdmin:Password"),
-            Required(configuration, "SeedAccounts:AgencyAdmin:FullName"),
-            Required(configuration, "SeedAccounts:Agency:Name"),
-            Required(configuration, "SeedAccounts:Agency:ContactInfo"),
-            Required(configuration, "SeedAccounts:Provider:Email"),
-            Required(configuration, "SeedAccounts:Provider:Password"),
-            Required(configuration, "SeedAccounts:Provider:FullName"),
-            Required(configuration, "SeedAccounts:Customer:Email"),
-            Required(configuration, "SeedAccounts:Customer:FullName"),
+            Optional(configuration, "SeedAccounts:PlatformAdmin:Email", "platform.admin@bantubantu.local"),
+            Password(configuration, "SeedAccounts:PlatformAdmin:Password"),
+            Optional(configuration, "SeedAccounts:AgencyAdmin:Email", "agency.admin@bantubantu.local"),
+            Password(configuration, "SeedAccounts:AgencyAdmin:Password"),
+            Optional(configuration, "SeedAccounts:AgencyAdmin:FullName", "Demo Agency Admin"),
+            Optional(configuration, "SeedAccounts:Agency:Name", "Demo Bantu-Bantu Agency"),
+            Optional(configuration, "SeedAccounts:Agency:ContactInfo", "demo-agency@bantubantu.local"),
+            Optional(configuration, "SeedAccounts:Provider:Email", "provider@bantubantu.local"),
+            Password(configuration, "SeedAccounts:Provider:Password"),
+            Optional(configuration, "SeedAccounts:Provider:FullName", "Demo Provider"),
+            Optional(configuration, "SeedAccounts:Customer:Email", "customer@bantubantu.local"),
+            Optional(configuration, "SeedAccounts:Customer:FullName", "Demo Customer"),
             Required(configuration, "SeedAccounts:Customer:GoogleSubject"));
     }
 }
