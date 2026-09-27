@@ -7,21 +7,24 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using BantuBantu.Api;
 var builder = WebApplication.CreateBuilder(args);
+var seedMode = args.Contains("--seed-admin") || args.Contains("--seed-accounts");
 var databaseConnection = new DatabaseConnectionStringResolver().Resolve(builder.Configuration);
-var originPolicy = AllowedOriginPolicy.FromConfiguration(builder.Configuration);
+var originPolicy = seedMode ? null : AllowedOriginPolicy.FromConfiguration(builder.Configuration);
 var storageProvider = (builder.Configuration["Storage:Provider"] ?? "Local").Trim();
-if (!storageProvider.Equals("Local", StringComparison.OrdinalIgnoreCase) && !storageProvider.Equals("S3", StringComparison.OrdinalIgnoreCase))
-    throw new InvalidOperationException("Storage:Provider must be Local or S3.");
-string[] required = ["Google:ClientId", "Jwt:KeyId", "Jwt:Issuer", "Jwt:Audience", "Jwt:AccessMinutes", "Jwt:RefreshDays", "Frontend:Origin"];
-foreach (var key in required) if (string.IsNullOrWhiteSpace(builder.Configuration[key])) throw new InvalidOperationException($"Missing configuration: {key}");
-if (new[] { "PrivateKey", "PublicKey" }.Any(name => new[] { $"Jwt:{name}Base64", $"Jwt:{name}", $"Jwt:{name}Path" }.All(key => string.IsNullOrWhiteSpace(builder.Configuration[key]))))
-    throw new InvalidOperationException("Configure both JWT RSA key materials using Base64 PEM, raw PEM, or file paths.");
-if (storageProvider.Equals("Local", StringComparison.OrdinalIgnoreCase) && string.IsNullOrWhiteSpace(builder.Configuration["Storage:RootPath"])) throw new InvalidOperationException("Missing configuration: Storage:RootPath");
-if (storageProvider.Equals("S3", StringComparison.OrdinalIgnoreCase))
-    foreach (var key in new[] { "Storage:S3:ServiceUrl", "Storage:S3:AccessKey", "Storage:S3:SecretKey", "Storage:S3:Bucket" })
-        if (string.IsNullOrWhiteSpace(builder.Configuration[key])) throw new InvalidOperationException($"Missing configuration: {key}");
-foreach (var key in new[] { "Jwt:AccessMinutes", "Jwt:RefreshDays" }) if (!int.TryParse(builder.Configuration[key], out var value) || value < 1) throw new InvalidOperationException($"Invalid configuration: {key}");
-var origin = originPolicy.PrimaryOrigin;
+if (!seedMode)
+{
+    if (!storageProvider.Equals("Local", StringComparison.OrdinalIgnoreCase) && !storageProvider.Equals("S3", StringComparison.OrdinalIgnoreCase))
+        throw new InvalidOperationException("Storage:Provider must be Local or S3.");
+    string[] required = ["Google:ClientId", "Jwt:KeyId", "Jwt:Issuer", "Jwt:Audience", "Jwt:AccessMinutes", "Jwt:RefreshDays", "Frontend:Origin"];
+    foreach (var key in required) if (string.IsNullOrWhiteSpace(builder.Configuration[key])) throw new InvalidOperationException($"Missing configuration: {key}");
+    if (new[] { "PrivateKey", "PublicKey" }.Any(name => new[] { $"Jwt:{name}Base64", $"Jwt:{name}", $"Jwt:{name}Path" }.All(key => string.IsNullOrWhiteSpace(builder.Configuration[key]))))
+        throw new InvalidOperationException("Configure both JWT RSA key materials using Base64 PEM, raw PEM, or file paths.");
+    if (storageProvider.Equals("Local", StringComparison.OrdinalIgnoreCase) && string.IsNullOrWhiteSpace(builder.Configuration["Storage:RootPath"])) throw new InvalidOperationException("Missing configuration: Storage:RootPath");
+    if (storageProvider.Equals("S3", StringComparison.OrdinalIgnoreCase))
+        foreach (var key in new[] { "Storage:S3:ServiceUrl", "Storage:S3:AccessKey", "Storage:S3:SecretKey", "Storage:S3:Bucket" })
+            if (string.IsNullOrWhiteSpace(builder.Configuration[key])) throw new InvalidOperationException($"Missing configuration: {key}");
+    foreach (var key in new[] { "Jwt:AccessMinutes", "Jwt:RefreshDays" }) if (!int.TryParse(builder.Configuration[key], out var value) || value < 1) throw new InvalidOperationException($"Invalid configuration: {key}");
+}
 builder.Services.AddControllers().AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));
 builder.Services.AddScoped<IWilayahRepository, WilayahRepository>();
 builder.Services.AddSingleton<IDocumentProcessor, DocumentProcessor>();
@@ -44,9 +47,13 @@ builder.Services.AddScoped<IAuthRepository, AuthRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddSingleton<IGoogleIdentityVerifier, GoogleIdentityVerifier>();
 builder.Services.AddSingleton<IPasswordService, PasswordService>();
+builder.Services.AddScoped<DemoAccountSeeder>();
 builder.Services.AddSingleton<RsaKeys>();
 builder.Services.AddSingleton<ITokenService, TokenService>();
-builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.SetIsOriginAllowed(originPolicy.IsAllowed).AllowAnyHeader().AllowAnyMethod()));
+if (originPolicy is null)
+    builder.Services.AddCors();
+else
+    builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.SetIsOriginAllowed(originPolicy.IsAllowed).AllowAnyHeader().AllowAnyMethod()));
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
 builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme).Configure<RsaKeys>((o, keys) =>
 {
@@ -71,6 +78,13 @@ if (args.Contains("--seed-admin"))
     var user = new AdminAccount { Email = email, FullName = "Administrator", Role = UserRole.PlatformAdmin, ProfileCompleted = true };
     user.PasswordHash = scope.ServiceProvider.GetRequiredService<IPasswordService>().Hash(user, password);
     repository.AddUser(user); await repository.SaveAsync(default); return;
+}
+if (args.Contains("--seed-accounts"))
+{
+    using var scope = app.Services.CreateScope();
+    var options = DemoAccountSeedOptions.FromConfiguration(builder.Configuration);
+    await scope.ServiceProvider.GetRequiredService<DemoAccountSeeder>().SeedAsync(options);
+    return;
 }
 app.UseExceptionHandler();
 app.Use(async (context, next) =>
