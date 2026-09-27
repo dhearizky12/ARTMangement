@@ -23,7 +23,7 @@ public partial class AuthIntegrationTests
         Assert.Equal(HttpStatusCode.OK, (await guest.GetAsync("/api/service-categories")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await customer.GetAsync("/api/profile/status")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await guest.GetAsync("/api/orders")).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await customer.PostAsJsonAsync("/api/admin/providers", new DraftRequest(null))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await customer.PostAsJsonAsync("/api/admin/providers", new DraftRequest(null, "customer-provider@example.test", "Provider-password-long-42!"))).StatusCode);
         using (var scope = factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -34,7 +34,7 @@ public partial class AuthIntegrationTests
                 await db.SaveChangesAsync();
             }
         }
-        var direct = await Read<ProviderAdminDto>(await platform.PostAsJsonAsync("/api/admin/providers", new DraftRequest(null)));
+        var direct = await Read<ProviderAdminDto>(await platform.PostAsJsonAsync("/api/admin/providers", new DraftRequest(null, "direct-provider@example.test", "Provider-password-long-42!")));
         Assert.Null(direct.Provider.AgencyId);
         Assert.Equal(HttpStatusCode.NotFound, (await guest.GetAsync($"/api/providers/{direct.Provider.Id}")).StatusCode);
         var agencies = new List<Agency>(); var agencyClients = new List<HttpClient>();
@@ -50,10 +50,10 @@ public partial class AuthIntegrationTests
             client.DefaultRequestHeaders.Authorization = new("Bearer", login.AccessToken); agencies.Add(a); agencyClients.Add(client);
         }
         using var aClient = agencyClients[0]; using var bClient = agencyClients[1];
-        var own = await Read<ProviderAdminDto>(await aClient.PostAsJsonAsync("/api/admin/providers", new DraftRequest(null)));
-        var other = await Read<ProviderAdminDto>(await bClient.PostAsJsonAsync("/api/admin/providers", new DraftRequest(null)));
+        var own = await Read<ProviderAdminDto>(await aClient.PostAsJsonAsync("/api/admin/providers", new DraftRequest(null, "agency-a-provider@example.test", "Provider-password-long-42!")));
+        var other = await Read<ProviderAdminDto>(await bClient.PostAsJsonAsync("/api/admin/providers", new DraftRequest(null, "agency-b-provider@example.test", "Provider-password-long-42!")));
         Assert.Equal(agencies[0].Id, own.Provider.AgencyId);
-        Assert.Equal(HttpStatusCode.Forbidden, (await aClient.PostAsJsonAsync("/api/admin/providers", new DraftRequest(agencies[1].Id))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await aClient.PostAsJsonAsync("/api/admin/providers", new DraftRequest(agencies[1].Id, "invalid-provider@example.test", "Provider-password-long-42!"))).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await aClient.GetAsync("/api/admin/agencies")).StatusCode);
         var roster = await Read<ProviderAdminDto[]>(await aClient.GetAsync("/api/admin/providers")); Assert.Single(roster); Assert.Equal(own.Provider.Id, roster[0].Provider.Id);
         var personal = new ProviderPersonalRequest("Penyedia Pengujian", 30, "Bio penyedia untuk pengujian integrasi.", 5);
@@ -100,6 +100,21 @@ public partial class AuthIntegrationTests
         Assert.Equal(HttpStatusCode.NotFound, (await aClient.PostAsJsonAsync($"/api/admin/orders/{order.Id}/status", new OrderStatusRequest(OrderStatus.Completed), Json)).StatusCode);
         await Read<OrderDto>(await platform.PostAsJsonAsync($"/api/admin/orders/{order.Id}/status", new OrderStatusRequest(OrderStatus.Confirmed), Json));
         await Read<OrderDto>(await platform.PostAsJsonAsync($"/api/admin/orders/{order.Id}/status", new OrderStatusRequest(OrderStatus.Completed), Json));
+        var providerLoginResponse = await guest.PostAsJsonAsync("/api/auth/provider/login", new ProviderLoginRequest("direct-provider@example.test", "Provider-password-long-42!"), Json);
+        var providerSession = await Read<AuthResponse>(providerLoginResponse);
+        Assert.Equal("Provider", providerSession.User.Role);
+        Assert.Equal(direct.Provider.Id.ToString(), new JwtSecurityTokenHandler().ReadJwtToken(providerSession.AccessToken).Claims.Single(c => c.Type == "providerId").Value);
+        using var providerClient = factory.CreateClient(); providerClient.DefaultRequestHeaders.Authorization = new("Bearer", providerSession.AccessToken);
+        var ownProfile = await Read<ProviderDto>(await providerClient.GetAsync("/api/provider/profile"));
+        Assert.Equal(direct.Provider.Id, ownProfile.Id);
+        var providerAvailability = Enum.GetValues<DayOfWeek>().Select(day => new AvailabilityRequest(day, day != DayOfWeek.Sunday)).ToArray();
+        var updatedProvider = await Read<ProviderDto>(await providerClient.PutAsJsonAsync("/api/provider/availability", new AvailabilityUpdateRequest(providerAvailability), Json));
+        Assert.False(updatedProvider.Availability.Single(a => a.DayOfWeek == DayOfWeek.Sunday).IsAvailable);
+        Assert.Single(await Read<OrderDto[]>(await providerClient.GetAsync("/api/provider/orders")));
+        Assert.Equal(HttpStatusCode.Forbidden, (await providerClient.GetAsync("/api/admin/providers")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await providerClient.PostAsJsonAsync("/api/auth/provider/change-password", new ChangePasswordRequest("Provider-password-long-42!", "Provider-password-new-42!"), Json)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await guest.PostAsJsonAsync("/api/auth/provider/login", new ProviderLoginRequest("direct-provider@example.test", "Provider-password-long-42!"), Json)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await guest.PostAsJsonAsync("/api/auth/provider/login", new ProviderLoginRequest("direct-provider@example.test", "Provider-password-new-42!"), Json)).StatusCode);
         await Read<ReviewDto>(await customer.PostAsJsonAsync($"/api/orders/{order.Id}/review", new ReviewRequest(5, "Layanan baik")));
         Assert.Equal(HttpStatusCode.Conflict, (await customer.PostAsJsonAsync($"/api/orders/{order.Id}/review", new ReviewRequest(1, "Duplikat"))).StatusCode);
         published = await Read<ProviderDto>(await guest.GetAsync($"/api/providers/{direct.Provider.Id}")); Assert.Equal(5, published.Rating); Assert.Equal(1, published.JobsCompletedCount);
@@ -107,6 +122,10 @@ public partial class AuthIntegrationTests
         await Save(aClient, own.Provider.Id, "personal-info", personal); await Save(aClient, own.Provider.Id, "address", address);
         foreach (var type in new[] { "KTP", "KK" }) { using var form = Form(type); await Read<ProviderAdminDto>(await aClient.PostAsync($"/api/admin/providers/{own.Provider.Id}/documents", form)); }
         await Save(aClient, own.Provider.Id, "profile", profile with { PricingType = PricingType.PerMonth, Price = 3000000 }); await Save(aClient, own.Provider.Id, "verify", verify);
+        var agencyProviderLogin = await Read<AuthResponse>(await guest.PostAsJsonAsync("/api/auth/provider/login", new ProviderLoginRequest("agency-a-provider@example.test", "Provider-password-long-42!"), Json));
+        using var agencyProviderClient = factory.CreateClient(); agencyProviderClient.DefaultRequestHeaders.Authorization = new("Bearer", agencyProviderLogin.AccessToken);
+        Assert.Equal(own.Provider.Id, (await Read<ProviderDto>(await agencyProviderClient.GetAsync("/api/provider/profile"))).Id);
+        Assert.Empty(await Read<OrderDto[]>(await agencyProviderClient.GetAsync("/api/provider/orders")));
         await Save(platform, own.Provider.Id, "verify", verify with { Status = VerificationStatus.Rejected, Note = "Platform override" });
         Assert.Equal(HttpStatusCode.NotFound, (await guest.GetAsync($"/api/providers/{own.Provider.Id}")).StatusCode);
         var audit = await Read<AuditEntry[]>(await platform.GetAsync("/api/admin/audit")); Assert.Contains(audit, x => x.Detail.Contains("Platform override"));

@@ -10,6 +10,7 @@ public class ProviderScope : IProviderScope
     {
         UserRole.PlatformAdmin => query,
         UserRole.AgencyAdmin when actor.AgencyId.HasValue => query.Where(p => p.AgencyId == actor.AgencyId),
+        UserRole.Provider when actor.ProviderId.HasValue && actor.ProviderId == actor.Id => query.Where(p => p.Id == actor.ProviderId),
         _ => query.Where(p => false)
     };
 }

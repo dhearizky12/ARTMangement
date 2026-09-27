@@ -91,10 +91,19 @@ app.Use(async (context, next) =>
     {
         var repo = context.RequestServices.GetRequiredService<IAuthRepository>();
         var id = Guid.TryParse(context.User.FindFirst("sub")?.Value, out var parsed) ? parsed : Guid.Empty;
-        var user = await repo.FindUserAsync(id, context.RequestAborted);
-        if (user is null || context.User.FindFirst("role")?.Value != user.Role.ToString() ||
-            context.User.FindFirst("agencyId")?.Value != (user as AdminAccount)?.AgencyId?.ToString() ||
-            !await repo.CanAuthenticateAsync(user, context.RequestAborted)) { context.Response.StatusCode = 401; return; }
+        var role = context.User.FindFirst("role")?.Value;
+        if (role == UserRole.Provider.ToString())
+        {
+            var providerId = Guid.TryParse(context.User.FindFirst("providerId")?.Value, out var provider) ? provider : Guid.Empty;
+            if (id == Guid.Empty || providerId == Guid.Empty || id != providerId || !await repo.CanAuthenticateProviderAsync(providerId, context.RequestAborted)) { context.Response.StatusCode = 401; return; }
+        }
+        else
+        {
+            var user = await repo.FindUserAsync(id, context.RequestAborted);
+            if (user is null || role != user.Role.ToString() ||
+                context.User.FindFirst("agencyId")?.Value != (user as AdminAccount)?.AgencyId?.ToString() ||
+                !await repo.CanAuthenticateAsync(user, context.RequestAborted)) { context.Response.StatusCode = 401; return; }
+        }
     }
     await next();
 });

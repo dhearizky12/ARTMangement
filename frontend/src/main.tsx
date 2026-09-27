@@ -5,6 +5,7 @@ import { GoogleOAuthProvider } from "@react-oauth/google";
 import { AuthProvider } from "./context/AuthContext";
 import { LoginPage } from "./pages/LoginPage";
 import { AdminLoginPage } from "./pages/AdminLoginPage";
+import { ProviderLoginPage } from "./pages/ProviderLoginPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ProtectedRoute } from "./routes/ProtectedRoute";
 
@@ -19,6 +20,7 @@ import { AgencyPage } from "./pages/admin/AgencyPage";
 import { CatalogPage } from "./pages/admin/CatalogPage";
 import { AdminOrdersPage } from "./pages/admin/AdminOrdersPage";
 import { AuditPage } from "./pages/admin/AuditPage";
+import { ProviderPanelPage } from "./pages/ProviderPanelPage";
 import "./styles/tokens.css";
 import "./styles.css";
 const configured = import.meta.env.VITE_API_BASE_URL;
@@ -36,6 +38,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/admin/login" element={<AdminLoginPage />} />
+              <Route path="/provider/login" element={<ProviderLoginPage />} />
               <Route path="/" element={<DashboardPage />} />
               <Route path="/dashboard" element={<Navigate to="/" replace />} />
               <Route
@@ -63,6 +66,10 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
                 <Route path="/admin/agencies" element={<AgencyPage />} />
                 <Route path="/admin/catalog" element={<CatalogPage />} />
                 <Route path="/admin/audit" element={<AuditPage />} />
+              </Route>
+              <Route element={<ProtectedRoute role="Provider" />}>
+                <Route path="/provider" element={<Navigate to="/provider/dashboard" replace />} />
+                <Route path="/provider/dashboard" element={<ProviderPanelPage />} />
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

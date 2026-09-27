@@ -57,11 +57,14 @@ public sealed class RsaKeys : IDisposable
 public class TokenService(IConfiguration config, RsaKeys keys) : ITokenService
 {
     public int RefreshDays => int.Parse(config["Jwt:RefreshDays"]!);
-    public AccessToken Create(User user)
+    public AccessToken Create(User user) => Create(user.Id, user.Email, user.Role, user.ProfileCompleted, (user as AdminAccount)?.AgencyId, null);
+    public AccessToken Create(Provider provider, string email) => Create(provider.Id, email, UserRole.Provider, true, null, provider.Id);
+    private AccessToken Create(Guid subject, string email, UserRole role, bool profileCompleted, Guid? agencyId, Guid? providerId)
     {
         var now = DateTimeOffset.UtcNow; var expiry = now.AddMinutes(int.Parse(config["Jwt:AccessMinutes"]!));
-        Claim[] claims = [new("sub", user.Id.ToString()), new("email", user.Email), new("role", user.Role.ToString()), new("profileCompleted", user.ProfileCompleted ? "true" : "false"), new("jti", Guid.NewGuid().ToString())];
-        if (user is AdminAccount { AgencyId: not null } admin) claims = [.. claims, new("agencyId", admin.AgencyId.Value.ToString())];
+        Claim[] claims = [new("sub", subject.ToString()), new("email", email), new("role", role.ToString()), new("profileCompleted", profileCompleted ? "true" : "false"), new("jti", Guid.NewGuid().ToString())];
+        if (agencyId is not null) claims = [.. claims, new("agencyId", agencyId.Value.ToString())];
+        if (providerId is not null) claims = [.. claims, new("providerId", providerId.Value.ToString())];
         var jwt = new JwtSecurityToken(config["Jwt:Issuer"], config["Jwt:Audience"], claims, now.UtcDateTime, expiry.UtcDateTime, new SigningCredentials(keys.SigningKey, SecurityAlgorithms.RsaSha256));
         return new(new JwtSecurityTokenHandler().WriteToken(jwt), expiry);
     }
@@ -75,4 +78,6 @@ public class PasswordService : IPasswordService
     public PasswordService() { dummy = hasher.HashPassword(new AdminAccount(), Convert.ToHexString(RandomNumberGenerator.GetBytes(32))); }
     public string Hash(AdminAccount user, string password) => hasher.HashPassword(user, password);
     public bool Verify(AdminAccount user, string password) => hasher.VerifyHashedPassword(user, string.IsNullOrEmpty(user.PasswordHash) ? dummy : user.PasswordHash, password) != PasswordVerificationResult.Failed && !string.IsNullOrEmpty(user.PasswordHash);
+    public string HashProvider(string password) => hasher.HashPassword(new AdminAccount(), password);
+    public bool VerifyProvider(string passwordHash, string password) => hasher.VerifyHashedPassword(new AdminAccount(), string.IsNullOrEmpty(passwordHash) ? dummy : passwordHash, password) != PasswordVerificationResult.Failed && !string.IsNullOrEmpty(passwordHash);
 }

@@ -2,14 +2,15 @@ using System.ComponentModel.DataAnnotations;
 using BantuBantu.Domain;
 namespace BantuBantu.Application;
 
-public record Actor(Guid Id, UserRole Role, Guid? AgencyId);
+public record Actor(Guid Id, UserRole Role, Guid? AgencyId, Guid? ProviderId = null);
 public interface ICurrentActor { Actor Get(); }
 public record AgencyRequest([Required, StringLength(120, MinimumLength = 2)] string Name, [Required, StringLength(500)] string ContactInfo);
 public record AgencyStatusRequest([EnumDataType(typeof(AgencyStatus))] AgencyStatus Status);
 public record AdminAccountRequest([Required, EmailAddress] string Email, [Required, StringLength(256, MinimumLength = 14)] string Password, [Required, StringLength(120)] string FullName, Guid AgencyId);
-public record DraftRequest(Guid? AgencyId);
+public record DraftRequest(Guid? AgencyId, [Required, EmailAddress] string Email, [Required, StringLength(256, MinimumLength = 14)] string Password);
 public record ProviderPersonalRequest([Required, StringLength(120, MinimumLength = 2)] string FullName, [Range(18, 80)] int Age, [Required, StringLength(2000, MinimumLength = 10)] string Bio, [Range(0, 62)] int YearsOfExperience);
 public record AvailabilityRequest([EnumDataType(typeof(DayOfWeek))] DayOfWeek DayOfWeek, bool IsAvailable);
+public record AvailabilityUpdateRequest([Required, MinLength(7), MaxLength(7)] AvailabilityRequest[] Availability);
 public record ProviderProfileRequest([Required, MinLength(1), MaxLength(10)] Guid[] CategoryIds, [Required, MinLength(1), MaxLength(20)] string[] Skills, [Required, MinLength(1), MaxLength(10)] string[] Languages, [EnumDataType(typeof(PricingType))] PricingType PricingType, [Range(typeof(decimal), "1", "999999999")] decimal Price, [Required, MinLength(7), MaxLength(7)] AvailabilityRequest[] Availability);
 public record VerifyRequest(bool IdentityVerified, bool BackgroundCheckPassed, bool ContractSigned, [EnumDataType(typeof(VerificationStatus))] VerificationStatus Status, [StringLength(1000)] string? Note);
 public record CategoryRequest([Required, RegularExpression("^[a-z0-9]+(?:-[a-z0-9]+)*$"), StringLength(80)] string Slug, [Required, StringLength(120)] string Name, [Required, StringLength(500)] string Description, [Required, StringLength(30)] string IconKey, int SortOrder, bool IsActive, bool IsFeatured);
