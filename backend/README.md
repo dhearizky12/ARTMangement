@@ -112,6 +112,8 @@ dotnet run --project BantuBantu.Api -- --seed-accounts
 
 Seeder ini idempotent: akun yang sudah cocok dilewati dan konflik role/email dihentikan dengan error. Seeder membuat Platform Admin, Agency Admin pada agency demo berstatus Approved, Provider terverifikasi, dan Customer. Customer tetap login melalui Google OAuth; `SeedAccounts:Customer:GoogleSubject` harus berisi nilai `sub` Google dari akun yang dipakai. Tidak ada password Customer karena kontrak autentikasi Customer memang Google-only. Password tiga akun email/password wajib minimal 14 karakter dan tidak pernah ditulis ke source code.
 
+Workflow `.github/workflows/migrate.yml` menyediakan input manual `seed_accounts`. Jika dicentang, workflow menjalankan migrasi dengan `DATABASE_URL_UNPOOLED` terlebih dahulu, lalu menjalankan seeder dengan secret `SEED_ACCOUNTS_*`. Seeder mode tidak membutuhkan JWT, Google Client ID, CORS, atau storage secret karena tidak menyalakan HTTP server; workflow tetap hanya berjalan melalui `workflow_dispatch`.
+
 ## REST API
 
 Semua route autentikasi dibatasi 20 request/menit per alamat IP. Akses API memakai header `Authorization: Bearer <accessToken>`; refresh token dikirim di body JSON dan hanya disimpan di memori frontend. Untuk reverse proxy, konfigurasikan trusted proxy dan forwarded headers secara eksplisit sebelum memakai IP klien sebagai partition.
