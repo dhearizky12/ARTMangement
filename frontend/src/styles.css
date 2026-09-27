@@ -353,6 +353,7 @@ form .btn {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-4);
+  align-items: stretch;
   margin: var(--space-5) 0 var(--space-6);
 }
 .category-link {
@@ -477,6 +478,21 @@ form .btn {
 .account-card p,
 dd {
   overflow-wrap: anywhere;
+}
+.account-login-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+.account-login-actions .btn {
+  width: 100%;
+  text-align: center;
+}
+.account-login-actions .text-link {
+  justify-content: center;
+  font-size: var(--text-caption);
 }
 dt {
   font-size: var(--text-caption);
@@ -639,9 +655,30 @@ dd {
 }
 .google-box {
   display: flex;
-  justify-content: center;
+  justify-content: stretch;
   align-items: center;
+  width: 100%;
   min-height: var(--touch);
+  margin: 0;
+}
+.google-box > div {
+  width: 100%;
+}
+.google-box iframe {
+  display: block;
+  width: 100% !important;
+  max-width: 100%;
+}
+.google-box > p {
+  width: 100%;
+  margin: 0;
+  text-align: center;
+}
+.login-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-3);
   margin: var(--space-6) 0;
 }
 .privacy {
@@ -659,12 +696,14 @@ dd {
 }
 .admin-link {
   font-size: var(--text-caption);
-  margin-bottom: 0;
+  margin: 0;
+  text-align: center;
 }
 .admin-link a {
   display: inline-flex;
   min-height: var(--touch);
   align-items: center;
+  justify-content: center;
   color: var(--color-primary);
   font-weight: var(--weight-title);
 }
@@ -1080,6 +1119,16 @@ summary {
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-3);
+  height: 100%;
+}
+.category-grid > .category-link > strong {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-height: 1.4;
+  min-height: calc(2 * 1.4em);
+  overflow-wrap: anywhere;
 }
 .site-header .text-link {
   color: var(--color-surface);

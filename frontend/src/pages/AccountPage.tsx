@@ -32,12 +32,17 @@ export function AccountPage() {
         ) : (
           <>
             <p>Masuk saat Anda siap memesan bantuan.</p>
-            <Link className="btn btn-primary" to="/login?returnTo=%2Faccount">
-              Masuk dengan Google
-            </Link>
-            <Link className="text-link" to="/admin/login">
-              Login admin
-            </Link>
+            <div className="account-login-actions">
+              <Link
+                className="btn btn-primary wide"
+                to="/login?returnTo=%2Faccount"
+              >
+                Masuk dengan Google
+              </Link>
+              <Link className="text-link" to="/admin/login">
+                Login admin
+              </Link>
+            </div>
           </>
         )}
       </Card>
