@@ -30,6 +30,7 @@ public class MarketplaceRepository(AppDbContext db, IProviderScope scope) : IMar
     }
     public Task<Provider?> PublicProviderAsync(Guid id, CancellationToken ct) => Details(Published()).SingleOrDefaultAsync(p => p.Id == id, ct);
     public Task<List<Provider>> AdminProvidersAsync(Actor actor, CancellationToken ct) => Details(scope.Apply(db.Providers, actor)).OrderByDescending(p => p.CreatedAt).Take(200).ToListAsync(ct);
+    public Task<List<Provider>> AdminVerificationQueueAsync(Actor actor, CancellationToken ct) => Details(scope.Apply(db.Providers, actor).Where(p => p.ApplicationStatus == ProviderApplicationStatus.Submitted && p.VerificationStatus == VerificationStatus.Pending)).OrderByDescending(p => p.SubmittedAt).ToListAsync(ct);
     public Task<Provider?> AdminProviderAsync(Actor actor, Guid id, CancellationToken ct) => Details(scope.Apply(db.Providers, actor)).SingleOrDefaultAsync(p => p.Id == id, ct);
     public void AddDocument(ProviderDocument document) => db.Set<ProviderDocument>().Add(document);
     public void AddProvider(Provider p) => db.Providers.Add(p);

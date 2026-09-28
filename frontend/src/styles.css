@@ -282,6 +282,17 @@ form .btn {
 .moderation-row .filter-chips {
   margin: 0;
 }
+.verification-queue-item {
+  margin-block: var(--space-3);
+}
+.verification-checklist {
+  display: grid;
+  gap: var(--space-2);
+  margin-block: var(--space-3);
+}
+.verification-actions {
+  align-items: center;
+}
 .page {
   width: 100%;
   max-width: var(--page-width);
