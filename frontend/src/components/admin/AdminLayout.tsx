@@ -21,8 +21,11 @@ export function AdminLayout({ children }: { children: ReactNode }) {
             : "Ruang kelola platform"}
         </p>
         <nav className="filter-chips" aria-label="Menu admin">
-          <NavLink className="btn btn-ghost" end to="/admin">
-            Penyedia
+          <NavLink className="btn btn-ghost" to="/admin#verification-queue">
+            Queue verifikasi
+          </NavLink>
+          <NavLink className="btn btn-ghost" to="/admin#provider-roster">
+            Roster provider
           </NavLink>
           <NavLink className="btn btn-ghost" to="/admin/orders">
             Pesanan

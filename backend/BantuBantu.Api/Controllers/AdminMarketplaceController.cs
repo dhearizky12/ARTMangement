@@ -10,6 +10,7 @@ public class AdminMarketplaceController(ProviderService providers, AgencyService
 {
     [HttpGet("providers")] public Task<ProviderAdminDto[]> Providers(CancellationToken ct) => providers.Roster(ct);
     [HttpGet("providers/applications")] public Task<ProviderAdminDto[]> Applications(CancellationToken ct, [FromQuery] ProviderApplicationStatus? status = ProviderApplicationStatus.Submitted) => providers.Applications(status, ct);
+    [HttpGet("providers/verification-queue")] public Task<ProviderAdminDto[]> VerificationQueue(CancellationToken ct) => providers.VerificationQueue(ct);
     [HttpPost("providers")] public Task<ProviderAdminDto> Draft(DraftRequest request, CancellationToken ct) => providers.Draft(request, ct);
     [HttpGet("providers/{id:guid}")] public Task<ProviderAdminDto> Provider(Guid id, CancellationToken ct) => providers.AdminDetail(id, ct);
     [HttpPost("providers/{id:guid}/personal-info")] public Task<ProviderAdminDto> Personal(Guid id, ProviderPersonalRequest request, CancellationToken ct) => providers.Personal(id, request, ct);
