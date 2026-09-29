@@ -41,7 +41,7 @@ public partial class AuthIntegrationTests
         foreach (var name in new[] { "Agency A", "Agency B" })
         {
             var a = await Read<Agency>(await platform.PostAsJsonAsync("/api/admin/agencies", new AgencyRequest(name, "Kontak pengujian")));
-            Assert.Equal(AgencyStatus.Pending, a.Status);
+            Assert.Equal(AgencyStatus.Approved, a.Status);
             await Read<Agency>(await platform.PostAsJsonAsync($"/api/admin/agencies/{a.Id}/status", new AgencyStatusRequest(AgencyStatus.Approved), Json));
             var admin = await Read<UserDto>(await platform.PostAsJsonAsync("/api/admin/accounts", new AdminAccountRequest($"{a.Id}@example.test", "Agency-password-long-42!", name, a.Id)));
             var client = factory.CreateClient(); client.DefaultRequestHeaders.Add("Origin", AuthFactory.Origin);
@@ -80,6 +80,55 @@ public partial class AuthIntegrationTests
             using var file = Form("KTP"); Assert.Equal(HttpStatusCode.NotFound, (await aClient.PostAsync($"/api/admin/providers/{target}/documents", file)).StatusCode);
             Assert.Equal(HttpStatusCode.NotFound, (await aClient.GetAsync($"/api/admin/providers/{target}/documents/{Guid.NewGuid()}")).StatusCode);
         }
+        async Task SubmitPending(ProviderAdminDto draft, string fullName)
+        {
+            using (var scope = factory.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var provider = await db.Providers.SingleAsync(p => p.Id == draft.Provider.Id);
+                var categoryId = await db.ServiceCategories.Where(c => c.IsActive).Select(c => c.Id).FirstAsync();
+                provider.FullName = fullName;
+                provider.Age = 30;
+                provider.Bio = "Provider queue untuk pengujian integrasi dan scoping.";
+                provider.YearsOfExperience = 5;
+                provider.VillageId = address.VillageId;
+                provider.AddressDetail = address.AddressDetail;
+                provider.PostalCode = address.PostalCode;
+                provider.Price = profile.Price;
+                provider.PricingType = profile.PricingType;
+                provider.ApplicationStatus = ProviderApplicationStatus.Submitted;
+                provider.SubmittedAt = DateTimeOffset.UtcNow;
+                db.Set<ProviderCategory>().Add(new ProviderCategory { ProviderId = provider.Id, ServiceCategoryId = categoryId });
+                db.Set<ProviderSkill>().Add(new ProviderSkill { ProviderId = provider.Id, SkillName = "Mengemudi" });
+                db.Set<ProviderLanguage>().Add(new ProviderLanguage { ProviderId = provider.Id, LanguageName = "Indonesia" });
+                foreach (var day in Enum.GetValues<DayOfWeek>()) db.Set<ProviderAvailability>().Add(new ProviderAvailability { ProviderId = provider.Id, DayOfWeek = day, IsAvailable = true });
+                foreach (var type in new[] { "KTP", "KK" }) db.Set<ProviderDocument>().Add(new ProviderDocument { ProviderId = provider.Id, DocumentType = type, StorageKey = $"{Guid.NewGuid():N}.jpg" });
+                await db.SaveChangesAsync();
+            }
+        }
+        await SubmitPending(own, "Agency Queue A");
+        await SubmitPending(other, "Agency Queue B");
+        var platformQueue = await Read<ProviderAdminDto[]>(await platform.GetAsync("/api/admin/providers/verification-queue"));
+        Assert.Equal(2, platformQueue.Length);
+        Assert.Equal(2, platformQueue.Count(p => p.Provider.Id == own.Provider.Id || p.Provider.Id == other.Provider.Id));
+        Assert.Contains(platformQueue, p => p.Provider.Id == own.Provider.Id);
+        Assert.Contains(platformQueue, p => p.Provider.Id == other.Provider.Id);
+        var agencyAQueue = await Read<ProviderAdminDto[]>(await aClient.GetAsync("/api/admin/providers/verification-queue"));
+        Assert.Single(agencyAQueue);
+        Assert.Equal(own.Provider.Id, agencyAQueue[0].Provider.Id);
+        var agencyBQueue = await Read<ProviderAdminDto[]>(await bClient.GetAsync("/api/admin/providers/verification-queue"));
+        Assert.Single(agencyBQueue);
+        Assert.Equal(other.Provider.Id, agencyBQueue[0].Provider.Id);
+        await Read<ProviderAdminDto>(await aClient.PostAsJsonAsync($"/api/admin/providers/{own.Provider.Id}/verify", verify, Json));
+        var missingReject = await bClient.PostAsJsonAsync($"/api/admin/providers/{other.Provider.Id}/verify", verify with { Status = VerificationStatus.Rejected, Note = null }, Json);
+        Assert.Equal(HttpStatusCode.BadRequest, missingReject.StatusCode);
+        Assert.Contains("Alasan penolakan wajib diisi", await missingReject.Content.ReadAsStringAsync());
+        var rejected = await Read<ProviderAdminDto>(await bClient.PostAsJsonAsync($"/api/admin/providers/{other.Provider.Id}/verify", verify with { Status = VerificationStatus.Rejected, Note = "Dokumen tidak sesuai." }, Json));
+        Assert.Equal(VerificationStatus.Rejected, rejected.Provider.VerificationStatus);
+        Assert.Equal(ProviderApplicationStatus.Rejected, rejected.Provider.ApplicationStatus);
+        Assert.DoesNotContain(await Read<ProviderAdminDto[]>(await platform.GetAsync("/api/admin/providers/verification-queue")), p => p.Provider.Id == own.Provider.Id || p.Provider.Id == other.Provider.Id);
+        Assert.DoesNotContain(await Read<ProviderAdminDto[]>(await platform.GetAsync("/api/admin/providers/verification-queue")), p => p.Provider.Id == direct.Provider.Id);
+        Assert.DoesNotContain(await Read<ProviderAdminDto[]>(await platform.GetAsync("/api/admin/providers/verification-queue")), p => p.Provider.ApplicationStatus is ProviderApplicationStatus.Draft or ProviderApplicationStatus.Approved or ProviderApplicationStatus.Rejected);
         // Full direct-talent wizard; no agency is required to publish it.
         await Save(platform, direct.Provider.Id, "personal-info", personal);
         Assert.Equal(HttpStatusCode.BadRequest, (await platform.PostAsJsonAsync($"/api/admin/providers/{direct.Provider.Id}/address", address with { VillageId = "0000000000" })).StatusCode);
