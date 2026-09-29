@@ -55,7 +55,7 @@ export function AgencyPage() {
                 maxLength={500}
                 required
               />
-              <Button type="submit">Buat agency pending</Button>
+              <Button type="submit">Buat agency aktif</Button>
             </fieldset>
           </form>
         </Card>
@@ -107,7 +107,7 @@ export function AgencyPage() {
           <p>{a.contactInfo}</p>
           <p>{a.status}</p>
           <div className="filter-chips">
-            {(["Pending", "Approved", "Suspended"] as const).map((status) => (
+            {(["Approved", "Suspended"] as const).map((status) => (
               <Button
                 key={status}
                 variant="ghost"

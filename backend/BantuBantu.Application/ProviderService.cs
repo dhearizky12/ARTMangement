@@ -18,6 +18,10 @@ public class ProviderService(IMarketplaceRepository repo, ICurrentActor current,
         var providers = await repo.AdminProvidersAsync(Admin(), ct);
         return providers.Where(p => !status.HasValue || p.ApplicationStatus == status.Value).Select(AdminMap).ToArray();
     }
+    public async Task<ProviderAdminDto[]> VerificationQueue(CancellationToken ct)
+    {
+        return (await repo.AdminVerificationQueueAsync(Admin(), ct)).Select(AdminMap).ToArray();
+    }
     public async Task<ProviderAdminDto> Draft(DraftRequest request, CancellationToken ct)
     {
         var actor = Admin(); var agencyId = request.AgencyId;
@@ -136,6 +140,7 @@ public class ProviderService(IMarketplaceRepository repo, ICurrentActor current,
     public async Task<ProviderAdminDto> Verify(Guid id, VerifyRequest r, CancellationToken ct)
     {
         var p = await Owned(id, ct); if (r.Status == VerificationStatus.Verified && (Step(p) != "verify" || !r.IdentityVerified || !r.BackgroundCheckPassed || !r.ContractSigned || !await repo.CategoriesExistAsync(p.Categories.Select(c => c.ServiceCategoryId).ToArray(), ct))) throw new ProfileException("Lengkapi semua tahap dan tiga pemeriksaan sebelum verifikasi.");
+        if (r.Status == VerificationStatus.Rejected && string.IsNullOrWhiteSpace(r.Note)) throw new ProfileException("Alasan penolakan wajib diisi.");
         p.IdentityVerified = r.IdentityVerified; p.BackgroundCheckPassed = r.BackgroundCheckPassed; p.ContractSigned = r.ContractSigned; p.VerificationStatus = r.Status; p.ApplicationStatus = r.Status == VerificationStatus.Verified ? ProviderApplicationStatus.Approved : r.Status == VerificationStatus.Rejected ? ProviderApplicationStatus.Rejected : p.ApplicationStatus; p.ModerationNote = r.Note; p.ReviewedAt = DateTimeOffset.UtcNow; p.ReviewedBy = Admin().Id; p.UpdatedAt = DateTimeOffset.UtcNow; repo.Audit(Admin(), id, "provider.verify", $"{r.Status}; identity={r.IdentityVerified}; background={r.BackgroundCheckPassed}; contract={r.ContractSigned}; {r.Note}"); await repo.SaveAsync(ct); return AdminMap(p);
     }
     public async Task<ProviderAdminDto> Moderate(Guid id, ProviderApplicationStatus status, ProviderModerationRequest request, CancellationToken ct)

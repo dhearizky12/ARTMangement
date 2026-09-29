@@ -1,16 +1,75 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AdminLayout } from "../components/admin/AdminLayout";
-import { Card, Button, Input, Select, Badge } from "../components/ui";
+import { Card, Button, Input, Select, Badge, Textarea } from "../components/ui";
 import { ResourceState } from "../components/ResourceState";
 import { useResource } from "../hooks/useResource";
-import { adminApi, type Agency } from "../api/marketplaceApi";
+import { adminApi, type Agency, type ProviderAdmin } from "../api/marketplaceApi";
 import { useAuth } from "../context/AuthContext";
+
+function VerificationQueueItem({ item, reload }: { item: ProviderAdmin; reload: () => Promise<void> }) {
+  const p = item.provider;
+  const [checks, setChecks] = useState({
+    identityVerified: p.identityVerified,
+    backgroundCheckPassed: p.backgroundCheckPassed,
+    contractSigned: p.contractSigned,
+  });
+  const [note, setNote] = useState(p.moderationNote ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    setChecks({ identityVerified: p.identityVerified, backgroundCheckPassed: p.backgroundCheckPassed, contractSigned: p.contractSigned });
+    setNote(p.moderationNote ?? "");
+  }, [p.id, p.identityVerified, p.backgroundCheckPassed, p.contractSigned, p.moderationNote]);
+
+  async function verify(status: "Pending" | "Verified" | "Rejected") {
+    if (status === "Rejected" && !note.trim()) {
+      setError("Alasan penolakan wajib diisi.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      await adminApi.verify(p.id, { ...checks, status, note: note.trim() || null });
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Pembaruan verifikasi gagal.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="verification-queue-item">
+      <div className="section-title">
+        <div>
+          <h3>{p.fullName || "Profil belum lengkap"}</h3>
+          <p className="muted">{p.agencyName || "Bantu-Bantu direct talent"} · Tahap {item.step}</p>
+        </div>
+        <Badge tone="accent">Pending</Badge>
+      </div>
+      <div className="verification-checklist" aria-label={`Checklist ${p.fullName}`}>
+        <label className="check-option"><input type="checkbox" checked={checks.identityVerified} onChange={(e) => setChecks((v) => ({ ...v, identityVerified: e.target.checked }))} />Identitas telah diperiksa</label>
+        <label className="check-option"><input type="checkbox" checked={checks.backgroundCheckPassed} onChange={(e) => setChecks((v) => ({ ...v, backgroundCheckPassed: e.target.checked }))} />Pemeriksaan latar belakang lulus</label>
+        <label className="check-option"><input type="checkbox" checked={checks.contractSigned} onChange={(e) => setChecks((v) => ({ ...v, contractSigned: e.target.checked }))} />Kontrak telah ditandatangani</label>
+      </div>
+      <Textarea label="Alasan penolakan (wajib saat menolak)" value={note} onChange={(e) => setNote(e.target.value)} maxLength={1000} placeholder="Isi jika aplikasi ditolak." />
+      {error && <p className="error" role="alert">{error}</p>}
+      <div className="filter-chips verification-actions">
+        <Link className="btn btn-ghost" to={`/admin/providers/${p.id}`}>Periksa detail</Link>
+        <Button variant="secondary" disabled={busy} onClick={() => void verify("Pending")}>Simpan checklist</Button>
+        <Button disabled={busy || !checks.identityVerified || !checks.backgroundCheckPassed || !checks.contractSigned} onClick={() => void verify("Verified")}>Setujui</Button>
+        <Button variant="ghost" disabled={busy || !note.trim()} onClick={() => void verify("Rejected")}>Tolak</Button>
+      </div>
+    </Card>
+  );
+}
+
 export function AdminDashboardPage() {
   const { session } = useAuth();
   const navigate = useNavigate();
   const roster = useResource(adminApi.roster, "roster");
-  const applications = useResource(adminApi.applications, "provider-applications");
+  const verificationQueue = useResource(adminApi.verificationQueue, "provider-verification-queue");
   const agencies = useResource(
     () =>
       session?.user.role === "PlatformAdmin"
@@ -23,7 +82,6 @@ export function AdminDashboardPage() {
   const [providerPassword, setProviderPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [moderating, setModerating] = useState("");
   async function create() {
     setBusy(true);
     setError("");
@@ -38,20 +96,6 @@ export function AdminDashboardPage() {
       setError(e instanceof Error ? e.message : "Gagal membuat draft.");
     } finally {
       setBusy(false);
-    }
-  }
-  async function moderate(id: string, action: "approve" | "reject" | "request-changes" | "suspend") {
-    const note = action === "approve" ? undefined : window.prompt("Catatan untuk Provider:");
-    if (action !== "approve" && note === null) return;
-    setModerating(id);
-    setError("");
-    try {
-      await adminApi.moderate(id, action, note || undefined);
-      await Promise.all([applications.reload(), roster.reload()]);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Moderasi gagal.");
-    } finally {
-      setModerating("");
     }
   }
   return (
@@ -103,42 +147,34 @@ export function AdminDashboardPage() {
         </Button>
         {error && <p role="alert">{error}</p>}
       </Card>
-      <Card>
+      <section id="verification-queue" aria-labelledby="verification-queue-title">
         <div className="section-title">
-          <h2>Aplikasi Provider</h2>
-          <Badge tone="accent">Menunggu moderasi</Badge>
+          <h2 id="verification-queue-title">Queue verifikasi provider</h2>
+          <Badge tone="accent">Pending</Badge>
         </div>
-        <ResourceState {...applications} />
-        {applications.data?.length ? applications.data.map(({ provider: p, step }) => (
-          <div className="moderation-row" key={p.id}>
-            <div>
-              <h3>{p.fullName || "Profil belum lengkap"}</h3>
-              <p className="muted">Tahap: {step} · {p.applicationStatus}</p>
-            </div>
-            <div className="filter-chips">
-              <Link className="btn btn-ghost" to={`/admin/providers/${p.id}`}>Periksa</Link>
-              <Button disabled={moderating === p.id} onClick={() => void moderate(p.id, "approve")}>Setujui</Button>
-              <Button variant="secondary" disabled={moderating === p.id} onClick={() => void moderate(p.id, "request-changes")}>Minta perbaikan</Button>
-              <Button variant="ghost" disabled={moderating === p.id} onClick={() => void moderate(p.id, "reject")}>Tolak</Button>
-            </div>
-          </div>
-        )) : applications.data ? <p>Tidak ada aplikasi yang menunggu moderasi.</p> : null}
-      </Card>
-      <ResourceState {...roster} />
-      <div className="provider-grid">
-        {roster.data?.map(({ provider: p, step }) => (
-          <Card key={p.id}>
-            <Badge>{p.verificationStatus}</Badge>
-            <h2>{p.fullName || "Draft belum diberi nama"}</h2>
-            <p>{p.agencyName || "Bantu-Bantu direct talent"}</p>
-            <p>Tahap: {step}</p>
-            <Link className="btn btn-secondary" to={`/admin/providers/${p.id}`}>
-              Kelola penyedia
-            </Link>
-          </Card>
-        ))}
-      </div>
-      {roster.data?.length === 0 && <p>Belum ada penyedia dalam roster ini.</p>}
+        <ResourceState {...verificationQueue} />
+        {verificationQueue.data?.length ? verificationQueue.data.map((item) => (
+          <VerificationQueueItem key={item.provider.id} item={item} reload={verificationQueue.reload} />
+        )) : verificationQueue.data ? <Card><p>Tidak ada provider yang menunggu verifikasi.</p></Card> : null}
+      </section>
+      <section id="provider-roster" aria-labelledby="provider-roster-title">
+        <h2 id="provider-roster-title">Roster provider</h2>
+        <ResourceState {...roster} />
+        <div className="provider-grid">
+          {roster.data?.map(({ provider: p, step }) => (
+            <Card key={p.id}>
+              <Badge>{p.verificationStatus}</Badge>
+              <h2>{p.fullName || "Draft belum diberi nama"}</h2>
+              <p>{p.agencyName || "Bantu-Bantu direct talent"}</p>
+              <p>Tahap: {step}</p>
+              <Link className="btn btn-secondary" to={`/admin/providers/${p.id}`}>
+                Kelola penyedia
+              </Link>
+            </Card>
+          ))}
+        </div>
+        {roster.data?.length === 0 && <p>Belum ada penyedia dalam roster ini.</p>}
+      </section>
     </AdminLayout>
   );
 }

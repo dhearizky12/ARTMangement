@@ -147,6 +147,10 @@ export const adminApi = {
   orders: () => authApi.get<Order[]>("/api/admin/orders"),
   applications: (status = "Submitted") =>
     authApi.get<ProviderAdmin[]>(`/api/admin/providers/applications?status=${status}`),
+  verificationQueue: () =>
+    authApi.get<ProviderAdmin[]>("/api/admin/providers/verification-queue"),
+  verify: (id: string, body: unknown) =>
+    authApi.post<ProviderAdmin>(`/api/admin/providers/${id}/verify`, body),
   moderate: (id: string, action: "approve" | "reject" | "request-changes" | "suspend", note?: string) =>
     authApi.post<ProviderAdmin>(`/api/admin/providers/${id}/${action}`, { note }),
 };

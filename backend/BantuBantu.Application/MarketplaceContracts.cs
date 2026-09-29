@@ -32,6 +32,7 @@ public interface IMarketplaceRepository
     Task<(int Total, List<Provider> Items)> BrowseAsync(string? q, Guid? category, string? villageId, int page, int pageSize, CancellationToken ct);
     Task<Provider?> PublicProviderAsync(Guid id, CancellationToken ct);
     Task<List<Provider>> AdminProvidersAsync(Actor actor, CancellationToken ct);
+    Task<List<Provider>> AdminVerificationQueueAsync(Actor actor, CancellationToken ct);
     Task<Provider?> AdminProviderAsync(Actor actor, Guid id, CancellationToken ct);
     void AddProvider(Provider provider);
     void AddDocument(ProviderDocument document);
