@@ -153,6 +153,14 @@ export const adminApi = {
     authApi.post<ProviderAdmin>(`/api/admin/providers/${id}/verify`, body),
   moderate: (id: string, action: "approve" | "reject" | "request-changes" | "suspend", note?: string) =>
     authApi.post<ProviderAdmin>(`/api/admin/providers/${id}/${action}`, { note }),
+  suspend: (id: string, note: string) =>
+    authApi.mutate<ProviderAdmin>(`/api/admin/providers/${id}/suspend`, "PATCH", { note }),
+  reactivate: (id: string) =>
+    authApi.mutate<ProviderAdmin>(`/api/admin/providers/${id}/reactivate`, "PATCH"),
+  suspendAgency: (id: string) =>
+    authApi.mutate<Agency>(`/api/admin/agencies/${id}/suspend`, "PATCH"),
+  reactivateAgency: (id: string) =>
+    authApi.mutate<Agency>(`/api/admin/agencies/${id}/reactivate`, "PATCH"),
 };
 export const providerApi = {
   profile: () => authApi.get<Provider>("/api/provider/profile"),

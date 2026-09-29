@@ -56,7 +56,19 @@ public class MarketplaceRepository(AppDbContext db, IProviderScope scope) : IMar
     public Task<Order?> OrderAsync(Actor actor, Guid id, CancellationToken ct) => ScopedOrders(actor).Include(o => o.Provider).Include(o => o.Review).SingleOrDefaultAsync(o => o.Id == id, ct);
     public void AddOrder(Order o) => db.Orders.Add(o);
     public void AddReview(Review r) => db.Reviews.Add(r);
-    public void Audit(Actor actor, Guid? providerId, string action, string detail) => db.AuditEntries.Add(new() { ActorId = actor.Id, ProviderId = providerId, Action = action, Detail = detail });
-    public Task<List<AuditEntry>> AuditAsync(CancellationToken ct) => db.AuditEntries.AsNoTracking().OrderByDescending(x => x.CreatedAt).Take(200).ToListAsync(ct);
+    public void Audit(Actor actor, Guid? providerId, string action, string detail) => Audit(actor, action, providerId.HasValue ? "Provider" : "", providerId, null, detail);
+    public void Audit(Actor actor, string action, string targetType, Guid? targetId, string? reason = null, string detail = "") => db.AuditEntries.Add(new AuditLogEntry
+    {
+        ActorId = actor.Id,
+        ActorRole = actor.Role.ToString(),
+        ActorAgencyId = actor.AgencyId,
+        Action = action,
+        TargetEntityType = targetType,
+        TargetEntityId = targetId,
+        ProviderId = targetType == "Provider" ? targetId : null,
+        Reason = reason,
+        Detail = detail
+    });
+    public Task<List<AuditLogEntry>> AuditAsync(CancellationToken ct) => db.AuditEntries.AsNoTracking().OrderByDescending(x => x.CreatedAt).Take(200).ToListAsync(ct);
     public async Task SaveAsync(CancellationToken ct) => await db.SaveChangesAsync(ct);
 }

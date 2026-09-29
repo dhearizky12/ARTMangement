@@ -144,7 +144,7 @@ export class AuthApi {
   }
   async mutate<T>(
     path: string,
-    method: "PUT" | "DELETE",
+    method: "PUT" | "PATCH" | "DELETE",
     body?: unknown,
   ): Promise<T> {
     return this.authorized<T>(path, body, method);

@@ -21,6 +21,8 @@ public class AdminMarketplaceController(ProviderService providers, AgencyService
     [HttpPost("providers/{id:guid}/reject")] public Task<ProviderAdminDto> Reject(Guid id, ProviderModerationRequest request, CancellationToken ct) => providers.Moderate(id, ProviderApplicationStatus.Rejected, request, ct);
     [HttpPost("providers/{id:guid}/request-changes")] public Task<ProviderAdminDto> RequestChanges(Guid id, ProviderModerationRequest request, CancellationToken ct) => providers.Moderate(id, ProviderApplicationStatus.NeedsChanges, request, ct);
     [HttpPost("providers/{id:guid}/suspend")] public Task<ProviderAdminDto> Suspend(Guid id, ProviderModerationRequest request, CancellationToken ct) => providers.Moderate(id, ProviderApplicationStatus.Suspended, request, ct);
+    [HttpPatch("providers/{id:guid}/suspend")] public Task<ProviderAdminDto> SuspendPatch(Guid id, ProviderModerationRequest request, CancellationToken ct) => providers.Moderate(id, ProviderApplicationStatus.Suspended, request, ct);
+    [HttpPatch("providers/{id:guid}/reactivate")] public Task<ProviderAdminDto> Reactivate(Guid id, CancellationToken ct) => providers.Reactivate(id, ct);
     [HttpPost("providers/{id:guid}/documents"), EnableRateLimiting("upload"), RequestSizeLimit(6 * 1024 * 1024)]
     public Task<ProviderAdminDto> Document(Guid id, [FromForm] string documentType, [FromForm] IFormFile file, CancellationToken ct) => Upload(id, documentType, file, ct);
     private async Task<ProviderAdminDto> Upload(Guid id, string type, IFormFile file, CancellationToken ct) { await using var stream = file.OpenReadStream(); return await providers.Document(id, type, stream, file.Length, file.ContentType, ct); }
@@ -30,11 +32,13 @@ public class AdminMarketplaceController(ProviderService providers, AgencyService
     [Authorize(Roles = "PlatformAdmin"), HttpGet("agencies")] public Task<List<Agency>> Agencies(CancellationToken ct) => agencies.Agencies(ct);
     [Authorize(Roles = "PlatformAdmin"), HttpPost("agencies")] public Task<Agency> Agency(AgencyRequest request, CancellationToken ct) => agencies.CreateAgency(request, ct);
     [Authorize(Roles = "PlatformAdmin"), HttpPost("agencies/{id:guid}/status")] public Task<Agency> AgencyStatus(Guid id, AgencyStatusRequest request, CancellationToken ct) => agencies.SetAgencyStatus(id, request, ct);
+    [Authorize(Roles = "PlatformAdmin"), HttpPatch("agencies/{id:guid}/suspend")] public Task<Agency> SuspendAgency(Guid id, CancellationToken ct) => agencies.Suspend(id, ct);
+    [Authorize(Roles = "PlatformAdmin"), HttpPatch("agencies/{id:guid}/reactivate")] public Task<Agency> ReactivateAgency(Guid id, CancellationToken ct) => agencies.Reactivate(id, ct);
     [Authorize(Roles = "PlatformAdmin"), HttpPost("accounts")] public Task<UserDto> Account(AdminAccountRequest request, CancellationToken ct) => agencies.CreateAdmin(request, ct);
     [Authorize(Roles = "PlatformAdmin"), HttpGet("categories")] public Task<List<ServiceCategory>> Categories(CancellationToken ct) => catalog.Categories(ct);
     [Authorize(Roles = "PlatformAdmin"), HttpPost("categories")] public Task<ServiceCategory> Category(CategoryRequest request, CancellationToken ct) => catalog.Category(null, request, ct);
     [Authorize(Roles = "PlatformAdmin"), HttpPut("categories/{id:guid}")] public Task<ServiceCategory> Category(Guid id, CategoryRequest request, CancellationToken ct) => catalog.Category(id, request, ct);
     [Authorize(Roles = "PlatformAdmin"), HttpDelete("categories/{id:guid}")] public async Task<IActionResult> DeleteCategory(Guid id, CancellationToken ct) { await catalog.DeleteCategory(id, ct); return NoContent(); }
     [Authorize(Roles = "PlatformAdmin"), HttpPut("content/{id}")] public Task<ContentBlock> Content(string id, ContentRequest request, CancellationToken ct) => catalog.Content(id, request, ct);
-    [Authorize(Roles = "PlatformAdmin"), HttpGet("audit")] public Task<List<AuditEntry>> Audit(CancellationToken ct) => catalog.Audit(ct);
+    [Authorize(Roles = "PlatformAdmin"), HttpGet("audit")] public Task<List<AuditLogEntry>> Audit(CancellationToken ct) => catalog.Audit(ct);
 }

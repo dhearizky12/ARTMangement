@@ -141,7 +141,10 @@ public class ProviderService(IMarketplaceRepository repo, ICurrentActor current,
     {
         var p = await Owned(id, ct); if (r.Status == VerificationStatus.Verified && (Step(p) != "verify" || !r.IdentityVerified || !r.BackgroundCheckPassed || !r.ContractSigned || !await repo.CategoriesExistAsync(p.Categories.Select(c => c.ServiceCategoryId).ToArray(), ct))) throw new ProfileException("Lengkapi semua tahap dan tiga pemeriksaan sebelum verifikasi.");
         if (r.Status == VerificationStatus.Rejected && string.IsNullOrWhiteSpace(r.Note)) throw new ProfileException("Alasan penolakan wajib diisi.");
-        p.IdentityVerified = r.IdentityVerified; p.BackgroundCheckPassed = r.BackgroundCheckPassed; p.ContractSigned = r.ContractSigned; p.VerificationStatus = r.Status; p.ApplicationStatus = r.Status == VerificationStatus.Verified ? ProviderApplicationStatus.Approved : r.Status == VerificationStatus.Rejected ? ProviderApplicationStatus.Rejected : p.ApplicationStatus; p.ModerationNote = r.Note; p.ReviewedAt = DateTimeOffset.UtcNow; p.ReviewedBy = Admin().Id; p.UpdatedAt = DateTimeOffset.UtcNow; repo.Audit(Admin(), id, "provider.verify", $"{r.Status}; identity={r.IdentityVerified}; background={r.BackgroundCheckPassed}; contract={r.ContractSigned}; {r.Note}"); await repo.SaveAsync(ct); return AdminMap(p);
+        p.IdentityVerified = r.IdentityVerified; p.BackgroundCheckPassed = r.BackgroundCheckPassed; p.ContractSigned = r.ContractSigned; p.VerificationStatus = r.Status; p.ApplicationStatus = r.Status == VerificationStatus.Verified ? ProviderApplicationStatus.Approved : r.Status == VerificationStatus.Rejected ? ProviderApplicationStatus.Rejected : p.ApplicationStatus; p.ModerationNote = r.Note; p.ReviewedAt = DateTimeOffset.UtcNow; p.ReviewedBy = Admin().Id; p.UpdatedAt = DateTimeOffset.UtcNow;
+        var action = r.Status == VerificationStatus.Rejected ? "provider.reject" : "provider.verify";
+        repo.Audit(Admin(), action, "Provider", id, r.Note, $"{r.Status}; identity={r.IdentityVerified}; background={r.BackgroundCheckPassed}; contract={r.ContractSigned}");
+        await repo.SaveAsync(ct); return AdminMap(p);
     }
     public async Task<ProviderAdminDto> Moderate(Guid id, ProviderApplicationStatus status, ProviderModerationRequest request, CancellationToken ct)
     {
@@ -162,8 +165,34 @@ public class ProviderService(IMarketplaceRepository repo, ICurrentActor current,
             if (string.IsNullOrWhiteSpace(request.Note)) throw new ProfileException("Catatan perbaikan wajib diisi.");
             p.VerificationStatus = VerificationStatus.Pending;
         }
-        else if (status != ProviderApplicationStatus.Suspended) throw new ProfileException("Status moderasi tidak valid.");
+        else if (status == ProviderApplicationStatus.Suspended)
+        {
+            if (p.ApplicationStatus != ProviderApplicationStatus.Approved || p.VerificationStatus != VerificationStatus.Verified) throw new ProfileException("Hanya provider terverifikasi yang dapat ditangguhkan.", 409);
+            if (string.IsNullOrWhiteSpace(request.Note)) throw new ProfileException("Alasan penangguhan wajib diisi.");
+        }
+        else throw new ProfileException("Status moderasi tidak valid.");
         p.ApplicationStatus = status; p.ModerationNote = request.Note?.Trim(); p.ReviewedAt = DateTimeOffset.UtcNow; p.ReviewedBy = actor.Id; p.UpdatedAt = DateTimeOffset.UtcNow;
-        repo.Audit(actor, id, "provider.application." + status, p.ModerationNote ?? ""); await repo.SaveAsync(ct); return AdminMap(p);
+        var action = status switch
+        {
+            ProviderApplicationStatus.Suspended => "provider.suspend",
+            ProviderApplicationStatus.Approved => "provider.verify",
+            ProviderApplicationStatus.Rejected => "provider.reject",
+            _ => "provider.application." + status
+        };
+        repo.Audit(actor, action, "Provider", id, p.ModerationNote, p.ModerationNote ?? ""); await repo.SaveAsync(ct); return AdminMap(p);
+    }
+    public async Task<ProviderAdminDto> Reactivate(Guid id, CancellationToken ct)
+    {
+        var actor = Admin();
+        var p = await Owned(id, ct);
+        if (p.ApplicationStatus != ProviderApplicationStatus.Suspended || p.VerificationStatus != VerificationStatus.Verified) throw new ProfileException("Provider tidak sedang ditangguhkan.", 409);
+        p.ApplicationStatus = ProviderApplicationStatus.Approved;
+        p.ModerationNote = null;
+        p.ReviewedAt = DateTimeOffset.UtcNow;
+        p.ReviewedBy = actor.Id;
+        p.UpdatedAt = DateTimeOffset.UtcNow;
+        repo.Audit(actor, "provider.reactivate", "Provider", id);
+        await repo.SaveAsync(ct);
+        return AdminMap(p);
     }
 }

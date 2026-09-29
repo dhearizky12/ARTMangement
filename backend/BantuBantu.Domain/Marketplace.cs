@@ -98,4 +98,20 @@ public class Order
 }
 public class Review { public Guid Id { get; set; } = Guid.NewGuid(); public Guid OrderId { get; set; } public Order Order { get; set; } = null!; public Guid CustomerId { get; set; } public User Customer { get; set; } = null!; public Guid ProviderId { get; set; } public Provider Provider { get; set; } = null!; public int Rating { get; set; } public string Comment { get; set; } = ""; public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow; }
 public class ContentBlock { public string Id { get; set; } = ""; public string Title { get; set; } = ""; public string Body { get; set; } = ""; public int SortOrder { get; set; } }
-public class AuditEntry { public Guid Id { get; set; } = Guid.NewGuid(); public Guid ActorId { get; set; } public Guid? ProviderId { get; set; } public string Action { get; set; } = ""; public string Detail { get; set; } = ""; public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow; }
+// AuditLogEntry is intentionally append-only from the application layer.  The
+// legacy ProviderId column is kept for backwards-compatible API consumers;
+// TargetEntityType/TargetEntityId are the canonical target fields.
+public class AuditLogEntry
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid ActorId { get; set; }
+    public string ActorRole { get; set; } = "";
+    public Guid? ActorAgencyId { get; set; }
+    public string Action { get; set; } = "";
+    public string TargetEntityType { get; set; } = "";
+    public Guid? TargetEntityId { get; set; }
+    public Guid? ProviderId { get; set; }
+    public string? Reason { get; set; }
+    public string Detail { get; set; } = "";
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+}

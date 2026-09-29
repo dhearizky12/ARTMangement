@@ -129,6 +129,17 @@ public partial class AuthIntegrationTests
         Assert.DoesNotContain(await Read<ProviderAdminDto[]>(await platform.GetAsync("/api/admin/providers/verification-queue")), p => p.Provider.Id == own.Provider.Id || p.Provider.Id == other.Provider.Id);
         Assert.DoesNotContain(await Read<ProviderAdminDto[]>(await platform.GetAsync("/api/admin/providers/verification-queue")), p => p.Provider.Id == direct.Provider.Id);
         Assert.DoesNotContain(await Read<ProviderAdminDto[]>(await platform.GetAsync("/api/admin/providers/verification-queue")), p => p.Provider.ApplicationStatus is ProviderApplicationStatus.Draft or ProviderApplicationStatus.Approved or ProviderApplicationStatus.Rejected);
+        // Post-verification suspension is scoped to the owning agency and removes
+        // the provider from public discovery without changing its verification.
+        var suspended = await aClient.PatchAsJsonAsync($"/api/admin/providers/{own.Provider.Id}/suspend", new ProviderModerationRequest("Dokumen perlu ditinjau ulang."), Json);
+        Assert.Equal(HttpStatusCode.OK, suspended.StatusCode);
+        var suspendedDto = await Read<ProviderAdminDto>(suspended);
+        Assert.Equal(ProviderApplicationStatus.Suspended, suspendedDto.Provider.ApplicationStatus);
+        Assert.Equal(VerificationStatus.Verified, suspendedDto.Provider.VerificationStatus);
+        Assert.Equal(HttpStatusCode.NotFound, (await guest.GetAsync($"/api/providers/{own.Provider.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await aClient.PatchAsJsonAsync($"/api/admin/providers/{other.Provider.Id}/suspend", new ProviderModerationRequest("Tidak boleh lintas agency."), Json)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await aClient.PatchAsync($"/api/admin/providers/{own.Provider.Id}/reactivate", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await guest.GetAsync($"/api/providers/{own.Provider.Id}")).StatusCode);
         // Full direct-talent wizard; no agency is required to publish it.
         await Save(platform, direct.Provider.Id, "personal-info", personal);
         Assert.Equal(HttpStatusCode.BadRequest, (await platform.PostAsJsonAsync($"/api/admin/providers/{direct.Provider.Id}/address", address with { VillageId = "0000000000" })).StatusCode);
@@ -187,11 +198,21 @@ public partial class AuthIntegrationTests
         using var agencyProviderClient = factory.CreateClient(); agencyProviderClient.DefaultRequestHeaders.Authorization = new("Bearer", agencyProviderLogin.AccessToken);
         Assert.Equal(own.Provider.Id, (await Read<ProviderDto>(await agencyProviderClient.GetAsync("/api/provider/profile"))).Id);
         Assert.Empty(await Read<OrderDto[]>(await agencyProviderClient.GetAsync("/api/provider/orders")));
-        await Save(platform, own.Provider.Id, "verify", verify with { Status = VerificationStatus.Rejected, Note = "Platform override" });
+        Assert.Equal(HttpStatusCode.OK, (await platform.PatchAsync($"/api/admin/agencies/{agencies[0].Id}/suspend", null)).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await guest.GetAsync($"/api/providers/{own.Provider.Id}")).StatusCode);
-        var audit = await Read<AuditEntry[]>(await platform.GetAsync("/api/admin/audit")); Assert.Contains(audit, x => x.Detail.Contains("Platform override"));
-        await Read<Agency>(await platform.PostAsJsonAsync($"/api/admin/agencies/{agencies[0].Id}/status", new AgencyStatusRequest(AgencyStatus.Suspended), Json));
         Assert.Equal(HttpStatusCode.Unauthorized, (await aClient.GetAsync("/api/admin/providers")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await platform.GetAsync($"/api/admin/providers/{own.Provider.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await platform.PatchAsync($"/api/admin/agencies/{agencies[0].Id}/reactivate", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await guest.GetAsync($"/api/providers/{own.Provider.Id}")).StatusCode);
+        await Save(platform, own.Provider.Id, "verify", verify with { Status = VerificationStatus.Rejected, Note = "Platform override" });
+        Assert.Equal(HttpStatusCode.NotFound, (await guest.GetAsync($"/api/providers/{own.Provider.Id}")).StatusCode);
+        var overrideAudit = await Read<AuditLogEntry[]>(await platform.GetAsync("/api/admin/audit")); Assert.Contains(overrideAudit, x => x.Reason!.Contains("Platform override"));
+        var audit = await Read<AuditLogEntry[]>(await platform.GetAsync("/api/admin/audit"));
+        Assert.Contains(audit, x => x.Action == "agency.suspend" && x.TargetEntityType == "Agency" && x.TargetEntityId == agencies[0].Id && x.ActorRole == "PlatformAdmin");
+        Assert.Contains(audit, x => x.Action == "agency.reactivate" && x.TargetEntityId == agencies[0].Id);
+        Assert.Contains(audit, x => x.Action == "provider.suspend" && x.TargetEntityId == own.Provider.Id && x.Reason!.Contains("ditinjau"));
+        Assert.Contains(audit, x => x.Action == "provider.reactivate" && x.TargetEntityId == own.Provider.Id);
+        Assert.Contains(audit, x => x.Action == "provider.reject" && x.TargetEntityId == own.Provider.Id && x.Reason!.Contains("Platform override"));
+        Assert.Contains(audit, x => x.Action == "agency-admin.create" && x.TargetEntityType == "AdminAccount");
     }
 }
