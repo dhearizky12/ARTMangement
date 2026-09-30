@@ -65,6 +65,45 @@ function VerificationQueueItem({ item, reload }: { item: ProviderAdmin; reload: 
   );
 }
 
+function ProviderRosterItem({ item, reload }: { item: ProviderAdmin; reload: () => Promise<void> }) {
+  const p = item.provider;
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const canSuspend = p.applicationStatus === "Approved" && p.verificationStatus === "Verified";
+  const suspended = p.applicationStatus === "Suspended";
+  async function suspend() {
+    if (!reason.trim()) { setError("Alasan penangguhan wajib diisi."); return; }
+    if (!window.confirm(`Tangguhkan ${p.fullName || "provider ini"}? Provider akan disembunyikan dari marketplace.`)) return;
+    setBusy(true); setError("");
+    try { await adminApi.suspend(p.id, reason.trim()); await reload(); }
+    catch (e) { setError(e instanceof Error ? e.message : "Gagal menangguhkan provider."); }
+    finally { setBusy(false); }
+  }
+  async function reactivate() {
+    if (!window.confirm(`Aktifkan kembali ${p.fullName || "provider ini"}?`)) return;
+    setBusy(true); setError("");
+    try { await adminApi.reactivate(p.id); await reload(); }
+    catch (e) { setError(e instanceof Error ? e.message : "Gagal mengaktifkan provider."); }
+    finally { setBusy(false); }
+  }
+  return (
+    <Card>
+      <Badge tone={suspended ? "accent" : p.verificationStatus === "Verified" ? "success" : "neutral"}>{p.applicationStatus === "Suspended" ? "Suspended" : p.verificationStatus}</Badge>
+      <h2>{p.fullName || "Draft belum diberi nama"}</h2>
+      <p>{p.agencyName || "Bantu-Bantu direct talent"}</p>
+      <p>Tahap: {item.step}</p>
+      {canSuspend && <Textarea label="Alasan penangguhan (wajib)" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={1000} placeholder="Contoh: dokumen perlu ditinjau ulang." />}
+      {error && <p className="error" role="alert">{error}</p>}
+      <div className="filter-chips">
+        <Link className="btn btn-secondary" to={`/admin/providers/${p.id}`}>Kelola penyedia</Link>
+        {canSuspend && <Button variant="ghost" disabled={busy} onClick={() => void suspend()}>Tangguhkan</Button>}
+        {suspended && <Button disabled={busy} onClick={() => void reactivate()}>Aktifkan kembali</Button>}
+      </div>
+    </Card>
+  );
+}
+
 export function AdminDashboardPage() {
   const { session } = useAuth();
   const navigate = useNavigate();
@@ -161,17 +200,7 @@ export function AdminDashboardPage() {
         <h2 id="provider-roster-title">Roster provider</h2>
         <ResourceState {...roster} />
         <div className="provider-grid">
-          {roster.data?.map(({ provider: p, step }) => (
-            <Card key={p.id}>
-              <Badge>{p.verificationStatus}</Badge>
-              <h2>{p.fullName || "Draft belum diberi nama"}</h2>
-              <p>{p.agencyName || "Bantu-Bantu direct talent"}</p>
-              <p>Tahap: {step}</p>
-              <Link className="btn btn-secondary" to={`/admin/providers/${p.id}`}>
-                Kelola penyedia
-              </Link>
-            </Card>
-          ))}
+          {roster.data?.map((item) => <ProviderRosterItem key={item.provider.id} item={item} reload={roster.reload} />)}
         </div>
         {roster.data?.length === 0 && <p>Belum ada penyedia dalam roster ini.</p>}
       </section>

@@ -53,6 +53,7 @@ public interface IMarketplaceRepository
     void AddOrder(Order order);
     void AddReview(Review review);
     void Audit(Actor actor, Guid? providerId, string action, string detail);
-    Task<List<AuditEntry>> AuditAsync(CancellationToken ct);
+    void Audit(Actor actor, string action, string targetType, Guid? targetId, string? reason = null, string detail = "");
+    Task<List<AuditLogEntry>> AuditAsync(CancellationToken ct);
     Task SaveAsync(CancellationToken ct);
 }

@@ -141,6 +141,11 @@ Semua route autentikasi dibatasi 20 request/menit per alamat IP. Akses API memak
 | POST | `/api/admin/providers/{id}/reject` | Admin; tolak dengan alasan |
 | POST | `/api/admin/providers/{id}/request-changes` | Admin; minta perbaikan |
 | POST | `/api/admin/providers/{id}/suspend` | Admin; tangguhkan akun |
+| PATCH | `/api/admin/providers/{id}/suspend` | Platform/owning Agency Admin; tangguhkan provider Verified (reason wajib) |
+| PATCH | `/api/admin/providers/{id}/reactivate` | Platform/owning Agency Admin; pulihkan provider ke Approved/Verified |
+| PATCH | `/api/admin/agencies/{id}/suspend` | Platform Admin; nonaktifkan agency dan seluruh roster publiknya |
+| PATCH | `/api/admin/agencies/{id}/reactivate` | Platform Admin; aktifkan kembali agency |
+| GET | `/api/admin/audit` | Platform Admin; 200 audit terbaru, newest first |
 | GET | `/.well-known/jwks.json` | Public RSA key saja |
 | GET | `/health` | Liveness, tidak memeriksa koneksi database |
 

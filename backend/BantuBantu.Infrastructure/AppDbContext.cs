@@ -24,7 +24,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<Review> Reviews => Set<Review>();
     public DbSet<ContentBlock> ContentBlocks => Set<ContentBlock>();
-    public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
+    public DbSet<AuditLogEntry> AuditEntries => Set<AuditLogEntry>();
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.Entity<User>().ToTable("Users");
@@ -82,6 +82,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<RefreshSession>().HasIndex(x => x.TokenHash).IsUnique();
         b.Entity<UserProfile>().HasKey(x => x.UserId);
         b.Entity<UserProfile>().HasOne(x => x.User).WithOne().HasForeignKey<UserProfile>(x => x.UserId);
+        b.Entity<AuditLogEntry>().ToTable("AuditEntries");
+        b.Entity<AuditLogEntry>().HasIndex(x => x.CreatedAt);
+        b.Entity<AuditLogEntry>().HasIndex(x => new { x.TargetEntityType, x.TargetEntityId });
     }
 }
 public class AuthRepository(AppDbContext db) : IAuthRepository

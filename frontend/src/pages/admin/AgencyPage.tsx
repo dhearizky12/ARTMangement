@@ -112,11 +112,16 @@ export function AgencyPage() {
                 key={status}
                 variant="ghost"
                 disabled={busy || a.status === status}
-                onClick={() =>
-                  act(`/api/admin/agencies/${a.id}/status`, { status })
-                }
+                onClick={() => {
+                  if (!window.confirm(status === "Suspended"
+                    ? `Tangguhkan agency ${a.name}? Admin dan seluruh provider agency ini akan kehilangan akses/visibilitas sampai diaktifkan kembali.`
+                    : `Aktifkan kembali agency ${a.name}?`)) return;
+                  void (status === "Suspended"
+                    ? adminApi.suspendAgency(a.id)
+                    : adminApi.reactivateAgency(a.id)).then(() => result.reload()).then(() => setMessage("Status agency diperbarui.")).catch((e) => setError(e instanceof Error ? e.message : "Gagal memperbarui status agency."));
+                }}
               >
-                {status}
+                {status === "Suspended" ? "Tangguhkan" : "Aktifkan kembali"}
               </Button>
             ))}
           </div>
