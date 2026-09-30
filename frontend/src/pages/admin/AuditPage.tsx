@@ -29,8 +29,8 @@ export function AuditPage() {
       {result.data?.map((e) => (
         <Card key={e.id}>
           <h2>{e.action}</h2>
-          <p>{e.detail}</p>
-          <p className="wrap">Aktor: {e.actorRole} · {e.actorId}{e.actorAgencyId ? ` · agency ${e.actorAgencyId}` : ""}</p>
+          <p>{e.detail || "—"}</p>
+          <p className="wrap">Aktor: {e.actorRole || "—"} · {e.actorId}{e.actorAgencyId ? ` · agency ${e.actorAgencyId}` : ""}</p>
           <p className="wrap">Target: {e.targetEntityType || "-"} {e.targetEntityId || e.providerId || "-"}</p>
           {e.reason && <p className="wrap">Alasan: {e.reason}</p>}
           <small>{new Date(e.createdAt).toLocaleString("id-ID")}</small>
