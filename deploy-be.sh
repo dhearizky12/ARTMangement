@@ -102,6 +102,12 @@ JWT_PUBLIC_KEY_FILE="$DEPLOY_SECRET_DIR/public.pem"
 STAGING_STORAGE_PROVIDER="Local"
 STAGING_STORAGE_ROOT="App_Data/documents"
 
+# Structured JSON logs are kept under App_Data so they can be retrieved via
+# the existing SFTP access. The remote cleanup step preserves this path.
+STAGING_LOG_PATH="${LOG_FILE_PATH:-App_Data/logs/api}"
+STAGING_LOG_RETAINED_FILES="${LOG_RETAINED_FILES:-14}"
+STAGING_LOG_MAX_FILE_BYTES="${LOG_MAX_FILE_BYTES:-10485760}"
+
 
 # ------------------------------------------------------------
 # Expected publish output
@@ -414,6 +420,12 @@ export Storage__Provider="$STAGING_STORAGE_PROVIDER"
 
 export Storage__RootPath="$STAGING_STORAGE_ROOT"
 
+# Structured rolling file logging
+export Logging__File__Path="$STAGING_LOG_PATH"
+export Logging__File__MinimumLevel="${LOG_MINIMUM_LEVEL:-Information}"
+export Logging__File__RetainedFiles="$STAGING_LOG_RETAINED_FILES"
+export Logging__File__MaxFileBytes="$STAGING_LOG_MAX_FILE_BYTES"
+
 
 # ------------------------------------------------------------
 # ASP.NET Host Filtering
@@ -487,6 +499,12 @@ log "Validating required application configuration..."
 [[ -n "${Storage__RootPath:-}" ]] \
     || fail "Storage__RootPath kosong."
 
+[[ "$Logging__File__RetainedFiles" =~ ^[1-9][0-9]*$ ]] \
+    || fail "Logging__File__RetainedFiles harus integer >= 1."
+
+[[ "$Logging__File__MaxFileBytes" =~ ^[1-9][0-9]*$ ]] \
+    || fail "Logging__File__MaxFileBytes harus integer >= 1."
+
 
 # ------------------------------------------------------------
 # Validate numeric JWT settings
@@ -518,6 +536,8 @@ echo "  Jwt:RefreshDays        : $Jwt__RefreshDays"
 echo "  JWT RSA keys           : configured"
 echo "  Storage:Provider       : $Storage__Provider"
 echo "  Storage:RootPath       : $Storage__RootPath"
+echo "  Logging:File:Path      : $Logging__File__Path"
+echo "  Logging retention      : $Logging__File__RetainedFiles files"
 echo "  Database               : configured"
 
 
@@ -671,6 +691,12 @@ variable_names = [
     # Storage
     "Storage__Provider",
     "Storage__RootPath",
+
+    # Structured rolling logs
+    "Logging__File__Path",
+    "Logging__File__MinimumLevel",
+    "Logging__File__RetainedFiles",
+    "Logging__File__MaxFileBytes",
 
     # ASP.NET
     "AllowedHosts",
@@ -863,6 +889,14 @@ safe_keys = [
 
     "Storage__RootPath",
 
+    "Logging__File__Path",
+
+    "Logging__File__MinimumLevel",
+
+    "Logging__File__RetainedFiles",
+
+    "Logging__File__MaxFileBytes",
+
     "AllowedHosts",
 ]
 
@@ -992,7 +1026,8 @@ log "Cleaning $REMOTE_DIR completely..."
 # /wwwroot/
 # └── app_offline.htm
 #
-# Everything from the old deployment is removed.
+# Everything from the old deployment is removed except App_Data/logs, which
+# is retained so the rolling diagnostics remain available after redeploys.
 #
 
 lftp -p "$FTP_PORT" <<EOF
@@ -1006,6 +1041,7 @@ mirror \
     -R \
     --delete \
     --delete-first \
+    --exclude-glob=App_Data/logs/** \
     --no-perms \
     --verbose \
     "$CLEAN_DIR" \
