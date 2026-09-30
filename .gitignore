@@ -15,6 +15,7 @@
 **/*.tsbuildinfo
 **/TestResults/
 **/.config/
+**/App_Data/
 frontend/test-results/
 frontend/playwright-report/
 .neon
