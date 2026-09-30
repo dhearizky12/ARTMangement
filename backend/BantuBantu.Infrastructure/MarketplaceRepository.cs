@@ -17,7 +17,10 @@ public class ProviderScope : IProviderScope
 public class MarketplaceRepository(AppDbContext db, IProviderScope scope) : IMarketplaceRepository
 {
     private IQueryable<Provider> Details(IQueryable<Provider> query) => query.AsSplitQuery().Include(p => p.Agency).Include(p => p.Village)!.ThenInclude(v => v!.District).ThenInclude(d => d.Regency).ThenInclude(r => r.Province).Include(p => p.Categories).ThenInclude(c => c.ServiceCategory).Include(p => p.Skills).Include(p => p.Languages).Include(p => p.Availability).Include(p => p.Documents).Include(p => p.Reviews).Include(p => p.Orders);
-    private IQueryable<Provider> Published() => db.Providers.Where(p => p.ApplicationStatus == ProviderApplicationStatus.Approved && p.VerificationStatus == VerificationStatus.Verified && (p.AgencyId == null || p.Agency!.Status == AgencyStatus.Approved) && p.Categories.Any(c => c.ServiceCategory.IsActive));
+    // A category can be retired without unpublishing providers that already
+    // carry it. Category selection/search still requires an active category;
+    // publication itself is governed by provider verification and agency state.
+    private IQueryable<Provider> Published() => db.Providers.Where(p => p.ApplicationStatus == ProviderApplicationStatus.Approved && p.VerificationStatus == VerificationStatus.Verified && (p.AgencyId == null || p.Agency!.Status == AgencyStatus.Approved));
     public async Task<(int Total, List<Provider> Items)> BrowseAsync(string? q, Guid? category, string? villageId, int page, int pageSize, CancellationToken ct)
     {
         var query = Published().AsNoTracking();

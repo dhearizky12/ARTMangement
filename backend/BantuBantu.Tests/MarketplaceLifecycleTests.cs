@@ -64,11 +64,14 @@ public partial class AuthIntegrationTests
         await Read<ServiceCategory>(await platform.PutAsJsonAsync($"/api/admin/categories/{newCategory.Id}", categoryBody with { IsActive = false }));
         Assert.DoesNotContain(await Read<ServiceCategoryDto[]>(await guest.GetAsync("/api/service-categories")), c => c.Id == newCategory.Id);
         Assert.Equal(HttpStatusCode.NoContent, (await platform.DeleteAsync($"/api/admin/categories/{newCategory.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await aClient.GetAsync("/api/admin/categories")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await aClient.PostAsJsonAsync("/api/admin/categories", categoryBody)).StatusCode);
+        var legacyCategoryBody = new CategoryRequest("legacy-layanan", "Kategori legacy", "Kategori yang sudah dipakai provider.", "briefcase", 10, true, false);
+        var legacyCategory = await Read<ServiceCategory>(await platform.PostAsJsonAsync("/api/admin/categories", legacyCategoryBody));
         await Read<ContentBlock>(await platform.PutAsJsonAsync("/api/admin/content/qa-information", new ContentRequest("Informasi uji", "Konten diperbarui oleh platform admin.", 10)));
         Assert.Contains(await Read<ContentBlock[]>(await guest.GetAsync("/api/content")), c => c.Id == "qa-information");
         var category = (await Read<ServiceCategoryDto[]>(await guest.GetAsync("/api/service-categories")))[0];
-        var profile = new ProviderProfileRequest([category.Id], ["Mengemudi"], ["Indonesia"], PricingType.PerVisit, 150000, Enum.GetValues<DayOfWeek>().Select(d => new AvailabilityRequest(d, true)).ToArray());
+        var profile = new ProviderProfileRequest([category.Id, legacyCategory.Id], ["Mengemudi"], ["Indonesia"], PricingType.PerVisit, 150000, Enum.GetValues<DayOfWeek>().Select(d => new AvailabilityRequest(d, true)).ToArray());
         var verify = new VerifyRequest(true, true, true, VerificationStatus.Verified, "Test pemeriksaan");
         using var image = new Image<SixLabors.ImageSharp.PixelFormats.Rgb24>(200, 120); using var stream = new MemoryStream(); await image.SaveAsync(stream, new SixLabors.ImageSharp.Formats.Png.PngEncoder()); var bytes = stream.ToArray();
         MultipartFormDataContent Form(string type, byte[]? content = null) { var f = new MultipartFormDataContent(); f.Add(new StringContent(type), "documentType"); var file = new ByteArrayContent(content ?? bytes); file.Headers.ContentType = new("image/png"); f.Add(file, "file", "../../identity.png"); return f; }
@@ -149,6 +152,7 @@ public partial class AuthIntegrationTests
         Assert.Equal("profile", direct.Step);
         Assert.Equal(HttpStatusCode.OK, (await platform.GetAsync($"/api/admin/providers/{direct.Provider.Id}/documents/{direct.Documents[0].Id}")).StatusCode);
         direct = await Save(platform, direct.Provider.Id, "profile", profile); Assert.Equal("verify", direct.Step);
+        Assert.Equal(HttpStatusCode.Conflict, (await platform.DeleteAsync($"/api/admin/categories/{legacyCategory.Id}")).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await platform.PostAsJsonAsync($"/api/admin/providers/{direct.Provider.Id}/verify", verify with { ContractSigned = false }, Json)).StatusCode);
         await Save(platform, direct.Provider.Id, "verify", verify);
         var published = await Read<ProviderDto>(await guest.GetAsync($"/api/providers/{direct.Provider.Id}")); Assert.Null(published.Rating); Assert.Equal(0, published.JobsCompletedCount);

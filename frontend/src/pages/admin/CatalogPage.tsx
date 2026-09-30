@@ -90,14 +90,14 @@ function CategoryEditor({
             type="number"
             defaultValue={category?.sortOrder || 0}
           />
-          <label className="check-option">
-            <input
-              type="checkbox"
-              name="isActive"
-              defaultChecked={category?.isActive ?? true}
-            />
-            Aktif
-          </label>
+          {category ? (
+            <p className="muted">Status: {category.isActive ? "Aktif" : "Nonaktif"}. Gunakan tombol status dengan konfirmasi di bawah.</p>
+          ) : (
+            <label className="check-option">
+              <input type="checkbox" name="isActive" defaultChecked />
+              Aktif
+            </label>
+          )}
           <label className="check-option">
             <input
               type="checkbox"
@@ -108,9 +108,39 @@ function CategoryEditor({
           </label>
           <Button type="submit">Simpan kategori</Button>
           {category && (
-            <Button
-              variant="ghost"
-              onClick={async () => {
+            <>
+              <Button
+                variant="secondary"
+                onClick={async () => {
+                  if (!window.confirm(category.isActive
+                    ? `Nonaktifkan kategori ${category.name}? Provider yang sudah memakai kategori ini tetap terlihat di marketplace.`
+                    : `Aktifkan kembali kategori ${category.name}?`)) return;
+                  setBusy(true);
+                  setError("");
+                  try {
+                    await authApi.mutate(`/api/admin/categories/${category.id}`, "PUT", {
+                      slug: category.slug,
+                      name: category.name,
+                      description: category.description,
+                      iconKey: category.iconKey,
+                      sortOrder: category.sortOrder,
+                      isActive: !category.isActive,
+                      isFeatured: category.isFeatured,
+                    });
+                    reload();
+                  } catch (e) {
+                    setError(e instanceof Error ? e.message : "Gagal memperbarui status.");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                {category.isActive ? "Nonaktifkan" : "Aktifkan"}
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={async () => {
+                  if (!window.confirm(`Hapus kategori ${category.name} secara permanen? Gunakan Nonaktifkan jika kategori pernah dipakai provider.`)) return;
                 setBusy(true);
                 try {
                   await authApi.mutate(
@@ -123,10 +153,11 @@ function CategoryEditor({
                 } finally {
                   setBusy(false);
                 }
-              }}
-            >
-              Hapus kategori
-            </Button>
+                }}
+              >
+                Hapus kategori
+              </Button>
+            </>
           )}
           {error && <p role="alert">{error}</p>}
         </fieldset>
