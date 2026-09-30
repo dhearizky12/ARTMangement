@@ -10,6 +10,11 @@ public class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbContext>
             .AddEnvironmentVariables()
             .Build();
         var connection = new DatabaseConnectionStringResolver().Resolve(configuration, preferUnpooled: true);
-        return new(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(connection).Options);
+        return new(new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql(connection, npgsql => npgsql.EnableRetryOnFailure(
+                maxRetryCount: 3,
+                maxRetryDelay: TimeSpan.FromSeconds(5),
+                errorCodesToAdd: null))
+            .Options);
     }
 }

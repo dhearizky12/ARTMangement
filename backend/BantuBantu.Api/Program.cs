@@ -1,8 +1,10 @@
 using System.Threading.RateLimiting;
+using System.Diagnostics;
 using BantuBantu.Application;
 using BantuBantu.Infrastructure;
 using BantuBantu.Domain;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using BantuBantu.Api;
@@ -25,6 +27,7 @@ if (!seedMode)
             if (string.IsNullOrWhiteSpace(builder.Configuration[key])) throw new InvalidOperationException($"Missing configuration: {key}");
     foreach (var key in new[] { "Jwt:AccessMinutes", "Jwt:RefreshDays" }) if (!int.TryParse(builder.Configuration[key], out var value) || value < 1) throw new InvalidOperationException($"Invalid configuration: {key}");
 }
+builder.Logging.AddProvider(new JsonFileLoggerProvider(builder.Configuration));
 builder.Services.AddControllers().AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));
 builder.Services.AddScoped<IWilayahRepository, WilayahRepository>();
 builder.Services.AddSingleton<IDocumentProcessor, DocumentProcessor>();
@@ -33,7 +36,14 @@ builder.Services.AddSingleton<IFileStorage>(_ => storageProvider.Equals("S3", St
     : new LocalFileStorage(builder.Configuration));
 builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
 builder.Services.AddScoped<ICategoryService, CategoryService>();
-builder.Services.AddProblemDetails();
+builder.Services.AddProblemDetails(o => o.CustomizeProblemDetails = context =>
+{
+    var traceId = string.IsNullOrWhiteSpace(context.HttpContext.TraceIdentifier)
+        ? Activity.Current?.TraceId.ToString() ?? "unknown"
+        : context.HttpContext.TraceIdentifier;
+    context.ProblemDetails.Extensions["traceId"] = traceId;
+    context.HttpContext.Response.Headers["X-Correlation-ID"] = traceId;
+});
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentActor, CurrentActor>();
 builder.Services.AddScoped<IProviderScope, ProviderScope>();
@@ -43,7 +53,11 @@ builder.Services.AddScoped<AgencyService>();
 builder.Services.AddScoped<CatalogService>();
 builder.Services.AddScoped<ReviewService>();
 builder.Services.AddScoped<OrderService>();
-builder.Services.AddDbContext<AppDbContext>(o => o.UseNpgsql(databaseConnection));
+builder.Services.AddDbContext<AppDbContext>(o => o.UseNpgsql(databaseConnection, npgsql =>
+    npgsql.EnableRetryOnFailure(
+        maxRetryCount: 3,
+        maxRetryDelay: TimeSpan.FromSeconds(5),
+        errorCodesToAdd: null)));
 builder.Services.AddScoped<IAuthRepository, AuthRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddSingleton<IGoogleIdentityVerifier, GoogleIdentityVerifier>();
@@ -87,14 +101,61 @@ if (args.Contains("--seed-accounts"))
     await scope.ServiceProvider.GetRequiredService<DemoAccountSeeder>().SeedAsync(options);
     return;
 }
-app.UseExceptionHandler();
+app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
+{
+    var error = context.Features.Get<IExceptionHandlerFeature>()?.Error;
+    var traceId = Activity.Current?.TraceId.ToString() ?? context.TraceIdentifier;
+    context.Response.Headers["X-Correlation-ID"] = traceId;
+    context.RequestServices.GetRequiredService<ILoggerFactory>()
+        .CreateLogger("BantuBantu.UnhandledException")
+        .LogError(error, "Unhandled HTTP exception. TraceId={TraceId} Method={Method} Path={Path}", traceId, context.Request.Method, context.Request.Path);
+    context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+    context.Response.ContentType = "application/problem+json";
+    await context.Response.WriteAsJsonAsync(new
+    {
+        type = "https://tools.ietf.org/html/rfc9110#section-15.6.1",
+        title = "An error occurred while processing your request.",
+        status = StatusCodes.Status500InternalServerError,
+        traceId
+    });
+}));
 app.Use(async (context, next) =>
 {
+    var incoming = context.Request.Headers["X-Correlation-ID"].FirstOrDefault();
+    var traceId = IsSafeCorrelationId(incoming)
+        ? incoming!
+        : Activity.Current?.TraceId.ToString() ?? context.TraceIdentifier;
+    context.TraceIdentifier = traceId;
+    context.Response.Headers["X-Correlation-ID"] = traceId;
     try { await next(); }
-    catch (ProfileException error) { context.Response.StatusCode = error.Status; await context.Response.WriteAsJsonAsync(new { title = error.Message, status = error.Status, code = error.Code, profileStep = error.Step }); }
-    catch (AuthenticationFailedException) { context.Response.StatusCode = 401; await context.Response.WriteAsJsonAsync(new { title = "Autentikasi gagal. Silakan login kembali.", status = 401 }); }
-    catch (DbUpdateConcurrencyException) { context.Response.StatusCode = 409; await context.Response.WriteAsJsonAsync(new { title = "Data berubah. Muat ulang sebelum menyimpan." }); }
-    catch (DbUpdateException e) when (e.InnerException is Npgsql.PostgresException { SqlState: "23505" }) { context.Response.StatusCode = 409; await context.Response.WriteAsJsonAsync(new { title = "Akun sedang diproses atau sudah terdaftar. Coba login kembali.", status = 409 }); }
+    catch (ProfileException error)
+    {
+        context.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("BantuBantu.Validation")
+            .LogWarning("Request validation failed. TraceId={TraceId} Status={Status} Code={Code} Path={Path}", traceId, error.Status, error.Code, context.Request.Path);
+        context.Response.StatusCode = error.Status;
+        await context.Response.WriteAsJsonAsync(new { title = error.Message, status = error.Status, code = error.Code, profileStep = error.Step, traceId });
+    }
+    catch (AuthenticationFailedException)
+    {
+        context.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("BantuBantu.Authentication")
+            .LogWarning("Authentication failed. TraceId={TraceId} Path={Path}", traceId, context.Request.Path);
+        context.Response.StatusCode = 401;
+        await context.Response.WriteAsJsonAsync(new { title = "Autentikasi gagal. Silakan login kembali.", status = 401, traceId });
+    }
+    catch (DbUpdateConcurrencyException error)
+    {
+        context.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("BantuBantu.Database")
+            .LogWarning(error, "Database concurrency conflict. TraceId={TraceId} Path={Path}", traceId, context.Request.Path);
+        context.Response.StatusCode = 409;
+        await context.Response.WriteAsJsonAsync(new { title = "Data berubah. Muat ulang sebelum menyimpan.", status = 409, traceId });
+    }
+    catch (DbUpdateException error) when (error.InnerException is Npgsql.PostgresException { SqlState: "23505" })
+    {
+        context.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("BantuBantu.Database")
+            .LogWarning(error, "Database uniqueness conflict. TraceId={TraceId} Path={Path}", traceId, context.Request.Path);
+        context.Response.StatusCode = 409;
+        await context.Response.WriteAsJsonAsync(new { title = "Akun sedang diproses atau sudah terdaftar. Coba login kembali.", status = 409, traceId });
+    }
 });
 app.UseCors();
 app.UseRateLimiter();
@@ -130,5 +191,8 @@ app.MapGet("/.well-known/jwks.json", (RsaKeys keys) =>
     var key = JsonWebKeyConverter.ConvertFromRSASecurityKey(keys.ValidationKey);
     return Results.Ok(new { keys = new[] { new { kty = key.Kty, kid = key.Kid, n = key.N, e = key.E, alg = "RS256", use = "sig" } } });
 });
+static bool IsSafeCorrelationId(string? value) =>
+    !string.IsNullOrWhiteSpace(value) && value.Length <= 128 && value.All(c => char.IsLetterOrDigit(c) || c is '-' or '_' or '.');
+
 app.Run();
 public partial class Program { }
