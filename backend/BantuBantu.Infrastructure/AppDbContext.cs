@@ -59,7 +59,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<Review>().HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
         b.Entity<Review>().HasOne(x => x.Provider).WithMany(x => x.Reviews).HasForeignKey(x => x.ProviderId).OnDelete(DeleteBehavior.Restrict);
         b.Entity<Review>().ToTable(t => t.HasCheckConstraint("CK_Review_Rating", "\"Rating\" BETWEEN 1 AND 5"));
-        b.Entity<ContentBlock>().HasData(new ContentBlock { Id = "verification", Title = "Kenali proses verifikasi kami", Body = "Admin memeriksa identitas, latar belakang, dan kontrak sebelum profil penyedia diterbitkan. Lencana terverifikasi menunjukkan pemeriksaan tersebut telah selesai, bukan jaminan atas setiap hasil layanan.", SortOrder = 1 });
+        b.Entity<Review>().HasIndex(x => new { x.ProviderId, x.IsHidden, x.CreatedAt });
+        b.Entity<ContentBlock>().Property(x => x.IconName).HasMaxLength(80);
+        b.Entity<ContentBlock>().HasData(
+            new ContentBlock { Id = "trust-intro", Title = "Kepercayaan dimulai dari kejelasan.", Body = "Kami menjelaskan bagaimana penyedia jasa diperiksa sebelum Anda memesan layanan.", IconName = "shield-check", SortOrder = 1 },
+            new ContentBlock { Id = "trust-identity", Title = "Identitas diperiksa", Body = "Kami memeriksa dokumen identitas penyedia dan mencocokkannya dengan data pendaftaran.", IconName = "badge-check", SortOrder = 2 },
+            new ContentBlock { Id = "trust-background", Title = "Latar belakang ditinjau", Body = "Tim kami meninjau informasi latar belakang dan pengalaman kerja sebelum profil diterbitkan.", IconName = "search-check", SortOrder = 3 },
+            new ContentBlock { Id = "trust-guarantee", Title = "Jaminan proses yang transparan", Body = "Lencana terverifikasi menunjukkan pemeriksaan telah selesai. Anda tetap dapat melihat detail profil, harga, ketersediaan, dan ulasan sebelum memesan.", IconName = "sparkles", SortOrder = 4 },
+            new ContentBlock { Id = "trust-protection", Title = "Perlindungan pelanggan", Body = "Pesan melalui platform, simpan detail pesanan, dan laporkan masalah kepada tim Bantu-Bantu agar dapat ditindaklanjuti.", IconName = "heart-handshake", SortOrder = 5 },
+            new ContentBlock { Id = "verification", Title = "Kenali proses verifikasi kami", Body = "Admin memeriksa identitas, latar belakang, dan kontrak sebelum profil penyedia diterbitkan.", IconName = "shield-check", SortOrder = 6 });
         b.HasPostgresExtension("pg_trgm");
         b.Entity<Province>().Property(x => x.Id).HasMaxLength(2);
         b.Entity<Regency>().Property(x => x.Id).HasMaxLength(4);

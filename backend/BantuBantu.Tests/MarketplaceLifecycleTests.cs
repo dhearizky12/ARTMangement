@@ -70,6 +70,17 @@ public partial class AuthIntegrationTests
         var legacyCategory = await Read<ServiceCategory>(await platform.PostAsJsonAsync("/api/admin/categories", legacyCategoryBody));
         await Read<ContentBlock>(await platform.PutAsJsonAsync("/api/admin/content/qa-information", new ContentRequest("Informasi uji", "Konten diperbarui oleh platform admin.", 10)));
         Assert.Contains(await Read<ContentBlock[]>(await guest.GetAsync("/api/content")), c => c.Id == "qa-information");
+        var trustSections = await Read<ContentBlock[]>(await guest.GetAsync("/api/trust-sections"));
+        Assert.Contains(trustSections, c => c.Id == "trust-intro");
+        var qaTrust = new TrustSectionRequest("qa-trust", "Konten kepercayaan uji", "Isi dari CMS.", "shield", 99, true);
+        await Read<ContentBlock>(await platform.PostAsJsonAsync("/api/admin/trust-sections", qaTrust, Json));
+        Assert.Contains(await Read<ContentBlock[]>(await guest.GetAsync("/api/trust-sections")), c => c.Id == "qa-trust");
+        await Read<ContentBlock>(await platform.PutAsJsonAsync("/api/admin/trust-sections/qa-trust", qaTrust with { IsActive = false }, Json));
+        Assert.DoesNotContain(await Read<ContentBlock[]>(await guest.GetAsync("/api/trust-sections")), c => c.Id == "qa-trust");
+        Assert.Contains(await Read<ContentBlock[]>(await platform.GetAsync("/api/admin/trust-sections")), c => c.Id == "qa-trust" && !c.IsActive);
+        Assert.Equal(HttpStatusCode.Forbidden, (await aClient.GetAsync("/api/admin/trust-sections")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await aClient.PostAsJsonAsync("/api/admin/trust-sections", qaTrust, Json)).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await platform.DeleteAsync("/api/admin/trust-sections/qa-trust")).StatusCode);
         var category = (await Read<ServiceCategoryDto[]>(await guest.GetAsync("/api/service-categories")))[0];
         var profile = new ProviderProfileRequest([category.Id, legacyCategory.Id], ["Mengemudi"], ["Indonesia"], PricingType.PerVisit, 150000, Enum.GetValues<DayOfWeek>().Select(d => new AvailabilityRequest(d, true)).ToArray());
         var verify = new VerifyRequest(true, true, true, VerificationStatus.Verified, "Test pemeriksaan");
@@ -164,6 +175,21 @@ public partial class AuthIntegrationTests
         Assert.Equal(HttpStatusCode.NotFound, (await aClient.PostAsJsonAsync($"/api/admin/orders/{order.Id}/status", new OrderStatusRequest(OrderStatus.Completed), Json)).StatusCode);
         await Read<OrderDto>(await platform.PostAsJsonAsync($"/api/admin/orders/{order.Id}/status", new OrderStatusRequest(OrderStatus.Confirmed), Json));
         await Read<OrderDto>(await platform.PostAsJsonAsync($"/api/admin/orders/{order.Id}/status", new OrderStatusRequest(OrderStatus.Completed), Json));
+        Guid ownReviewId;
+        Guid otherReviewId;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var ownOrder = new Order { CustomerId = customerSession.User.Id, ProviderId = own.Provider.Id, Status = OrderStatus.Completed, ScheduledDate = DateOnly.FromDateTime(DateTime.UtcNow), Price = 100000, PricingType = PricingType.PerVisit, VillageId = address.VillageId, AddressDetail = "Alamat agency A" };
+            var otherOrder = new Order { CustomerId = customerSession.User.Id, ProviderId = other.Provider.Id, Status = OrderStatus.Completed, ScheduledDate = DateOnly.FromDateTime(DateTime.UtcNow), Price = 110000, PricingType = PricingType.PerVisit, VillageId = address.VillageId, AddressDetail = "Alamat agency B" };
+            var ownReview = new Review { Order = ownOrder, CustomerId = customerSession.User.Id, ProviderId = own.Provider.Id, Rating = 2, Comment = "Ulasan agency A" };
+            var otherReview = new Review { Order = otherOrder, CustomerId = customerSession.User.Id, ProviderId = other.Provider.Id, Rating = 4, Comment = "Ulasan agency B" };
+            db.Orders.AddRange(ownOrder, otherOrder);
+            db.Reviews.AddRange(ownReview, otherReview);
+            await db.SaveChangesAsync();
+            ownReviewId = ownReview.Id;
+            otherReviewId = otherReview.Id;
+        }
         var registeredProvider = await Read<AuthResponse>(await guest.PostAsJsonAsync("/api/auth/provider/register", new ProviderRegistrationRequest("self-register@example.test", "Provider-password-long-42!", "Provider-password-long-42!"), Json));
         Assert.Equal("Provider", registeredProvider.User.Role);
         using var selfProvider = factory.CreateClient(); selfProvider.DefaultRequestHeaders.Authorization = new("Bearer", registeredProvider.AccessToken);
@@ -192,6 +218,42 @@ public partial class AuthIntegrationTests
         Assert.Equal(HttpStatusCode.Unauthorized, (await guest.PostAsJsonAsync("/api/auth/provider/login", new ProviderLoginRequest("direct-provider@example.test", "Provider-password-long-42!"), Json)).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await guest.PostAsJsonAsync("/api/auth/provider/login", new ProviderLoginRequest("direct-provider@example.test", "Provider-password-new-42!"), Json)).StatusCode);
         await Read<ReviewDto>(await customer.PostAsJsonAsync($"/api/orders/{order.Id}/review", new ReviewRequest(5, "Layanan baik")));
+        Guid directReviewId;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            directReviewId = await db.Reviews.Where(r => r.OrderId == order.Id).Select(r => r.Id).SingleAsync();
+        }
+        var beforeModeration = await Read<ProviderDto>(await guest.GetAsync($"/api/providers/{direct.Provider.Id}"));
+        Assert.Equal(5, beforeModeration.Rating);
+        Assert.Equal(1, beforeModeration.ReviewCount);
+        var adminReviews = await Read<ReviewAdminDto[]>(await platform.GetAsync("/api/admin/reviews"));
+        Assert.Contains(adminReviews, r => r.Id == directReviewId && !r.IsHidden);
+        var agencyAReviews = await Read<ReviewAdminDto[]>(await aClient.GetAsync("/api/admin/reviews"));
+        Assert.Contains(agencyAReviews, r => r.Id == ownReviewId);
+        Assert.DoesNotContain(agencyAReviews, r => r.Id == otherReviewId || r.Id == directReviewId);
+        var agencyBReviews = await Read<ReviewAdminDto[]>(await bClient.GetAsync("/api/admin/reviews"));
+        Assert.Contains(agencyBReviews, r => r.Id == otherReviewId);
+        Assert.DoesNotContain(agencyBReviews, r => r.Id == ownReviewId || r.Id == directReviewId);
+        Assert.Equal(HttpStatusCode.NotFound, (await aClient.PatchAsJsonAsync($"/api/admin/reviews/{otherReviewId}/hide", new ReviewModerationRequest("Lintas agency"), Json)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await aClient.PatchAsJsonAsync($"/api/admin/reviews/{directReviewId}/hide", new ReviewModerationRequest("Lintas agency"), Json)).StatusCode);
+        var missingReviewReason = await platform.PatchAsJsonAsync($"/api/admin/reviews/{directReviewId}/hide", new ReviewModerationRequest(null), Json);
+        Assert.Equal(HttpStatusCode.BadRequest, missingReviewReason.StatusCode);
+        Assert.Contains("Alasan menyembunyikan ulasan wajib diisi", await missingReviewReason.Content.ReadAsStringAsync());
+        var hiddenReview = await Read<ReviewAdminDto>(await platform.PatchAsJsonAsync($"/api/admin/reviews/{directReviewId}/hide", new ReviewModerationRequest("Konten melanggar kebijakan."), Json));
+        Assert.True(hiddenReview.IsHidden);
+        var afterHide = await Read<ProviderDto>(await guest.GetAsync($"/api/providers/{direct.Provider.Id}"));
+        Assert.Null(afterHide.Rating);
+        Assert.Equal(0, afterHide.ReviewCount);
+        Assert.Empty(afterHide.Reviews);
+        var restoredReview = await Read<ReviewAdminDto>(await platform.PatchAsync($"/api/admin/reviews/{directReviewId}/restore", null));
+        Assert.False(restoredReview.IsHidden);
+        var afterRestore = await Read<ProviderDto>(await guest.GetAsync($"/api/providers/{direct.Provider.Id}"));
+        Assert.Equal(5, afterRestore.Rating);
+        Assert.Equal(1, afterRestore.ReviewCount);
+        var reviewAudit = await Read<AuditLogEntry[]>(await platform.GetAsync("/api/admin/audit"));
+        Assert.Contains(reviewAudit, x => x.Action == "review.hide" && x.TargetEntityId == directReviewId && x.Reason == "Konten melanggar kebijakan.");
+        Assert.Contains(reviewAudit, x => x.Action == "review.restore" && x.TargetEntityId == directReviewId);
         Assert.Equal(HttpStatusCode.Conflict, (await customer.PostAsJsonAsync($"/api/orders/{order.Id}/review", new ReviewRequest(1, "Duplikat"))).StatusCode);
         published = await Read<ProviderDto>(await guest.GetAsync($"/api/providers/{direct.Provider.Id}")); Assert.Equal(5, published.Rating); Assert.Equal(1, published.JobsCompletedCount);
         // Agency wizard followed by PlatformAdmin override must remain audited.
@@ -201,7 +263,7 @@ public partial class AuthIntegrationTests
         var agencyProviderLogin = await Read<AuthResponse>(await guest.PostAsJsonAsync("/api/auth/provider/login", new ProviderLoginRequest("agency-a-provider@example.test", "Provider-password-long-42!"), Json));
         using var agencyProviderClient = factory.CreateClient(); agencyProviderClient.DefaultRequestHeaders.Authorization = new("Bearer", agencyProviderLogin.AccessToken);
         Assert.Equal(own.Provider.Id, (await Read<ProviderDto>(await agencyProviderClient.GetAsync("/api/provider/profile"))).Id);
-        Assert.Empty(await Read<OrderDto[]>(await agencyProviderClient.GetAsync("/api/provider/orders")));
+        Assert.Single(await Read<OrderDto[]>(await agencyProviderClient.GetAsync("/api/provider/orders")));
         Assert.Equal(HttpStatusCode.OK, (await platform.PatchAsync($"/api/admin/agencies/{agencies[0].Id}/suspend", null)).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await guest.GetAsync($"/api/providers/{own.Provider.Id}")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await aClient.GetAsync("/api/admin/providers")).StatusCode);

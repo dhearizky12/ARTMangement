@@ -85,6 +85,22 @@ export interface Content {
   title: string;
   body: string;
   sortOrder: number;
+  iconName: string | null;
+  isActive: boolean;
+}
+export interface ReviewAdmin {
+  id: string;
+  orderId: string;
+  providerId: string;
+  providerName: string;
+  customerId: string;
+  reviewerName: string;
+  rating: number;
+  comment: string;
+  createdAt: string;
+  isHidden: boolean;
+  hiddenReason: string | null;
+  hiddenAt: string | null;
 }
 export interface Order {
   id: string;
@@ -125,6 +141,7 @@ export const marketplaceApi = {
     authApi.publicGet<ProviderPage>(`/api/providers?${params}`),
   provider: (id: string) => authApi.publicGet<Provider>(`/api/providers/${id}`),
   content: () => authApi.publicGet<Content[]>("/api/content"),
+  trustSections: () => authApi.publicGet<Content[]>("/api/trust-sections"),
   orders: () => authApi.get<Order[]>("/api/orders"),
   book: (body: unknown) => authApi.post<Order>("/api/orders", body),
   review: (id: string, body: unknown) =>
@@ -161,6 +178,18 @@ export const adminApi = {
     authApi.mutate<Agency>(`/api/admin/agencies/${id}/suspend`, "PATCH"),
   reactivateAgency: (id: string) =>
     authApi.mutate<Agency>(`/api/admin/agencies/${id}/reactivate`, "PATCH"),
+  reviews: () => authApi.get<ReviewAdmin[]>("/api/admin/reviews"),
+  hideReview: (id: string, reason: string) =>
+    authApi.mutate<ReviewAdmin>(`/api/admin/reviews/${id}/hide`, "PATCH", { reason }),
+  restoreReview: (id: string) =>
+    authApi.mutate<ReviewAdmin>(`/api/admin/reviews/${id}/restore`, "PATCH"),
+  trustSections: () => authApi.get<Content[]>("/api/admin/trust-sections"),
+  createTrustSection: (body: unknown) =>
+    authApi.post<Content>("/api/admin/trust-sections", body),
+  updateTrustSection: (id: string, body: unknown) =>
+    authApi.mutate<Content>(`/api/admin/trust-sections/${id}`, "PUT", body),
+  deleteTrustSection: (id: string) =>
+    authApi.mutate<void>(`/api/admin/trust-sections/${id}`, "DELETE"),
 };
 export const providerApi = {
   profile: () => authApi.get<Provider>("/api/provider/profile"),

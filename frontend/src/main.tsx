@@ -21,6 +21,7 @@ import { AgencyPage } from "./pages/admin/AgencyPage";
 import { CatalogPage } from "./pages/admin/CatalogPage";
 import { AdminOrdersPage } from "./pages/admin/AdminOrdersPage";
 import { AuditPage } from "./pages/admin/AuditPage";
+import { ReviewsPage } from "./pages/admin/ReviewsPage";
 import { ProviderPanelPage } from "./pages/ProviderPanelPage";
 import { ProviderOnboardingPage } from "./pages/ProviderOnboardingPage";
 import "./styles/tokens.css";
@@ -64,10 +65,12 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
                   element={<ProviderWizardPage />}
                 />
                 <Route path="/admin/orders" element={<AdminOrdersPage />} />
+                <Route path="/admin/reviews" element={<ReviewsPage />} />
               </Route>
               <Route element={<ProtectedRoute platform />}>
                 <Route path="/admin/agencies" element={<AgencyPage />} />
                 <Route path="/admin/catalog" element={<CatalogPage />} />
+                <Route path="/admin/content" element={<CatalogPage />} />
                 <Route path="/admin/audit" element={<AuditPage />} />
               </Route>
               <Route element={<ProtectedRoute role="Provider" />}>

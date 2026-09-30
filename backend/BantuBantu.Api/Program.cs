@@ -41,6 +41,7 @@ builder.Services.AddScoped<IMarketplaceRepository, MarketplaceRepository>();
 builder.Services.AddScoped<ProviderService>();
 builder.Services.AddScoped<AgencyService>();
 builder.Services.AddScoped<CatalogService>();
+builder.Services.AddScoped<ReviewService>();
 builder.Services.AddScoped<OrderService>();
 builder.Services.AddDbContext<AppDbContext>(o => o.UseNpgsql(databaseConnection));
 builder.Services.AddScoped<IAuthRepository, AuthRepository>();

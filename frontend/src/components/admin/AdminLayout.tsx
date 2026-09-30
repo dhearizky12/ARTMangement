@@ -30,12 +30,15 @@ export function AdminLayout({ children }: { children: ReactNode }) {
           <NavLink className="btn btn-ghost" to="/admin/orders">
             Pesanan
           </NavLink>
+          <NavLink className="btn btn-ghost" to="/admin/reviews">
+            Ulasan
+          </NavLink>
           {session?.user.role === "PlatformAdmin" && (
             <>
               <NavLink className="btn btn-ghost" to="/admin/agencies">
                 Agency
               </NavLink>
-              <NavLink className="btn btn-ghost" to="/admin/catalog">
+              <NavLink className="btn btn-ghost" to="/admin/content">
                 Kategori & konten
               </NavLink>
               <NavLink className="btn btn-ghost" to="/admin/audit">

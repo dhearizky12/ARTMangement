@@ -4,13 +4,22 @@ import { ResourceState } from "../components/ResourceState";
 import { useResource } from "../hooks/useResource";
 import { marketplaceApi } from "../api/marketplaceApi";
 export function TrustPage() {
-  const result = useResource(marketplaceApi.content, "trust");
+  const result = useResource(marketplaceApi.trustSections, "trust");
+  const sections = result.data || [];
+  const intro = sections[0];
   return (
     <AppShell>
-      <h1>Kepercayaan dimulai dari kejelasan.</h1>
       <ResourceState {...result} />
-      {result.data?.map((c) => (
+      {intro && (
+        <Card lifted>
+          <p className="eyebrow">Keamanan layanan</p>
+          <h1>{intro.title}</h1>
+          <p className="preserve-lines">{intro.body}</p>
+        </Card>
+      )}
+      {sections.slice(1).map((c, index) => (
         <Card key={c.id}>
+          <p className="eyebrow">Langkah {index + 1}</p>
           <h2>{c.title}</h2>
           <p className="preserve-lines">{c.body}</p>
         </Card>

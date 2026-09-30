@@ -5,7 +5,6 @@ import { ResourceState } from "../../components/ResourceState";
 import { useResource } from "../../hooks/useResource";
 import {
   adminApi,
-  marketplaceApi,
   type Category,
   type Content,
 } from "../../api/marketplaceApi";
@@ -184,11 +183,16 @@ function ContentEditor({
           setBusy(true);
           setError("");
           try {
-            await authApi.mutate(`/api/admin/content/${d.get("id")}`, "PUT", {
+            const body = {
+              id: d.get("id"),
               title: d.get("title"),
               body: d.get("body"),
+              iconName: d.get("iconName") || null,
               sortOrder: Number(d.get("sortOrder")),
-            });
+              isActive: d.has("isActive"),
+            };
+            if (content) await adminApi.updateTrustSection(content.id, body);
+            else await adminApi.createTrustSection(body);
             reload();
           } catch (e) {
             setError(e instanceof Error ? e.message : "Gagal menyimpan.");
@@ -214,6 +218,12 @@ function ContentEditor({
             maxLength={150}
             defaultValue={content?.title}
           />
+          <Input
+            label="Nama ikon (opsional)"
+            name="iconName"
+            maxLength={80}
+            defaultValue={content?.iconName || ""}
+          />
           <Textarea
             label="Isi konten"
             name="body"
@@ -228,7 +238,55 @@ function ContentEditor({
             type="number"
             defaultValue={content?.sortOrder || 0}
           />
+          <label className="check-option">
+            <input type="checkbox" name="isActive" defaultChecked={content?.isActive ?? true} />
+            Tampilkan di halaman publik
+          </label>
           <Button type="submit">Simpan konten</Button>
+          {content && (
+            <>
+              <Button
+                variant="secondary"
+                onClick={async () => {
+                  const next = !content.isActive;
+                  if (!window.confirm(next ? `Aktifkan ${content.title}?` : `Nonaktifkan ${content.title}?`)) return;
+                  setBusy(true);
+                  try {
+                    await adminApi.updateTrustSection(content.id, {
+                      id: content.id,
+                      title: content.title,
+                      body: content.body,
+                      iconName: content.iconName,
+                      sortOrder: content.sortOrder,
+                      isActive: next,
+                    });
+                    reload();
+                  } catch (e) {
+                    setError(e instanceof Error ? e.message : "Gagal memperbarui status.");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                {content.isActive ? "Nonaktifkan" : "Aktifkan"}
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={async () => {
+                  if (!window.confirm(`Hapus blok ${content.title}?`)) return;
+                  setBusy(true);
+                  try {
+                    await adminApi.deleteTrustSection(content.id);
+                    reload();
+                  } catch (e) {
+                    setError(e instanceof Error ? e.message : "Gagal menghapus.");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >Hapus blok</Button>
+            </>
+          )}
           {error && <p role="alert">{error}</p>}
         </fieldset>
       </form>
@@ -237,7 +295,7 @@ function ContentEditor({
 }
 export function CatalogPage() {
   const categories = useResource(adminApi.categories, "admin-categories");
-  const content = useResource(marketplaceApi.content, "admin-content");
+  const content = useResource(adminApi.trustSections, "admin-trust-sections");
   return (
     <AdminLayout>
       <h1>Kategori & informasi</h1>

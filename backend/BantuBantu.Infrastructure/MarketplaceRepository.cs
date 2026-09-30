@@ -28,7 +28,7 @@ public class MarketplaceRepository(AppDbContext db, IProviderScope scope) : IMar
         if (category.HasValue) query = query.Where(p => p.Categories.Any(c => c.ServiceCategoryId == category && c.ServiceCategory.IsActive));
         if (!string.IsNullOrEmpty(villageId)) query = query.Where(p => p.VillageId == villageId);
         var count = await query.CountAsync(ct);
-        var items = await Details(query.OrderByDescending(p => p.Reviews.Select(r => (double?)r.Rating).Average() ?? 0).ThenBy(p => p.Id).Skip((page - 1) * pageSize).Take(pageSize)).ToListAsync(ct);
+        var items = await Details(query.OrderByDescending(p => p.Reviews.Where(r => !r.IsHidden).Select(r => (double?)r.Rating).Average() ?? 0).ThenBy(p => p.Id).Skip((page - 1) * pageSize).Take(pageSize)).ToListAsync(ct);
         return (count, items);
     }
     public Task<Provider?> PublicProviderAsync(Guid id, CancellationToken ct) => Details(Published()).SingleOrDefaultAsync(p => p.Id == id, ct);
@@ -46,9 +46,15 @@ public class MarketplaceRepository(AppDbContext db, IProviderScope scope) : IMar
     public Task<List<Agency>> AgenciesAsync(CancellationToken ct) => db.Agencies.OrderBy(a => a.Name).ToListAsync(ct);
     public Task<Agency?> AgencyAsync(Guid id, CancellationToken ct) => db.Agencies.SingleOrDefaultAsync(a => a.Id == id, ct);
     public void AddAgency(Agency a) => db.Agencies.Add(a);
-    public Task<List<ContentBlock>> ContentAsync(CancellationToken ct) => db.ContentBlocks.OrderBy(c => c.SortOrder).ToListAsync(ct);
+    public Task<List<ContentBlock>> ContentAsync(CancellationToken ct) => db.ContentBlocks.AsNoTracking().Where(c => c.IsActive).OrderBy(c => c.SortOrder).ThenBy(c => c.Id).ToListAsync(ct);
+    public Task<List<ContentBlock>> AdminContentAsync(CancellationToken ct) => db.ContentBlocks.OrderBy(c => c.SortOrder).ThenBy(c => c.Id).ToListAsync(ct);
     public Task<ContentBlock?> ContentAsync(string id, CancellationToken ct) => db.ContentBlocks.SingleOrDefaultAsync(c => c.Id == id, ct);
     public void AddContent(ContentBlock c) => db.ContentBlocks.Add(c);
+    public void RemoveContent(ContentBlock c) => db.ContentBlocks.Remove(c);
+    private IQueryable<Review> ScopedReviews(Actor actor) => db.Reviews.Where(r => scope.Apply(db.Providers, actor).Select(p => p.Id).Contains(r.ProviderId));
+    private IQueryable<Review> ReviewDetails(IQueryable<Review> query) => query.Include(r => r.Customer).Include(r => r.Provider).ThenInclude(p => p.Agency);
+    public Task<List<Review>> AdminReviewsAsync(Actor actor, CancellationToken ct) => ReviewDetails(ScopedReviews(actor)).OrderByDescending(r => r.CreatedAt).Take(200).ToListAsync(ct);
+    public Task<Review?> AdminReviewAsync(Actor actor, Guid id, CancellationToken ct) => ReviewDetails(ScopedReviews(actor)).SingleOrDefaultAsync(r => r.Id == id, ct);
     private IQueryable<Order> ScopedOrders(Actor actor)
     {
         if (actor.Role == UserRole.Customer) return db.Orders.Where(o => o.CustomerId == actor.Id);

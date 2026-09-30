@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.RateLimiting;
 namespace BantuBantu.Api.Controllers;
 
 [ApiController, Route("api/admin"), Authorize(Roles = "PlatformAdmin,AgencyAdmin")]
-public class AdminMarketplaceController(ProviderService providers, AgencyService agencies, CatalogService catalog, OrderService orders) : ControllerBase
+public class AdminMarketplaceController(ProviderService providers, AgencyService agencies, CatalogService catalog, OrderService orders, ReviewService reviews) : ControllerBase
 {
     [HttpGet("providers")] public Task<ProviderAdminDto[]> Providers(CancellationToken ct) => providers.Roster(ct);
     [HttpGet("providers/applications")] public Task<ProviderAdminDto[]> Applications(CancellationToken ct, [FromQuery] ProviderApplicationStatus? status = ProviderApplicationStatus.Submitted) => providers.Applications(status, ct);
@@ -29,6 +29,9 @@ public class AdminMarketplaceController(ProviderService providers, AgencyService
     [HttpGet("providers/{id:guid}/documents/{documentId:guid}")] public async Task<IActionResult> Document(Guid id, Guid documentId, CancellationToken ct) { var file = await providers.DocumentDownload(id, documentId, ct); Response.Headers.CacheControl = "no-store"; return File(file.Content, "image/jpeg", file.Name); }
     [HttpGet("orders")] public Task<OrderDto[]> Orders(CancellationToken ct) => orders.Orders(ct);
     [HttpPost("orders/{id:guid}/status")] public Task<OrderDto> OrderStatus(Guid id, OrderStatusRequest request, CancellationToken ct) => orders.ChangeOrder(id, request, ct);
+    [HttpGet("reviews")] public Task<ReviewAdminDto[]> Reviews(CancellationToken ct) => reviews.List(ct);
+    [HttpPatch("reviews/{id:guid}/hide")] public Task<ReviewAdminDto> HideReview(Guid id, ReviewModerationRequest request, CancellationToken ct) => reviews.Hide(id, request, ct);
+    [HttpPatch("reviews/{id:guid}/restore")] public Task<ReviewAdminDto> RestoreReview(Guid id, CancellationToken ct) => reviews.Restore(id, ct);
     [Authorize(Roles = "PlatformAdmin"), HttpGet("agencies")] public Task<List<Agency>> Agencies(CancellationToken ct) => agencies.Agencies(ct);
     [Authorize(Roles = "PlatformAdmin"), HttpPost("agencies")] public Task<Agency> Agency(AgencyRequest request, CancellationToken ct) => agencies.CreateAgency(request, ct);
     [Authorize(Roles = "PlatformAdmin"), HttpPost("agencies/{id:guid}/status")] public Task<Agency> AgencyStatus(Guid id, AgencyStatusRequest request, CancellationToken ct) => agencies.SetAgencyStatus(id, request, ct);
@@ -40,5 +43,9 @@ public class AdminMarketplaceController(ProviderService providers, AgencyService
     [Authorize(Roles = "PlatformAdmin"), HttpPut("categories/{id:guid}")] public Task<ServiceCategory> Category(Guid id, CategoryRequest request, CancellationToken ct) => catalog.Category(id, request, ct);
     [Authorize(Roles = "PlatformAdmin"), HttpDelete("categories/{id:guid}")] public async Task<IActionResult> DeleteCategory(Guid id, CancellationToken ct) { await catalog.DeleteCategory(id, ct); return NoContent(); }
     [Authorize(Roles = "PlatformAdmin"), HttpPut("content/{id}")] public Task<ContentBlock> Content(string id, ContentRequest request, CancellationToken ct) => catalog.Content(id, request, ct);
+    [Authorize(Roles = "PlatformAdmin"), HttpGet("trust-sections")] public Task<List<ContentBlock>> TrustSections(CancellationToken ct) => catalog.AdminContent(ct);
+    [Authorize(Roles = "PlatformAdmin"), HttpPost("trust-sections")] public Task<ContentBlock> CreateTrustSection(TrustSectionRequest request, CancellationToken ct) => catalog.SaveTrust(null, request, ct);
+    [Authorize(Roles = "PlatformAdmin"), HttpPut("trust-sections/{id}")] public Task<ContentBlock> UpdateTrustSection(string id, TrustSectionRequest request, CancellationToken ct) => catalog.SaveTrust(id, request, ct);
+    [Authorize(Roles = "PlatformAdmin"), HttpDelete("trust-sections/{id}")] public async Task<IActionResult> DeleteTrustSection(string id, CancellationToken ct) { await catalog.DeleteTrust(id, ct); return NoContent(); }
     [Authorize(Roles = "PlatformAdmin"), HttpGet("audit")] public Task<List<AuditLogEntry>> Audit(CancellationToken ct) => catalog.Audit(ct);
 }
