@@ -57,6 +57,10 @@ Isi konfigurasi via `dotnet user-secrets set 'Key' 'value' --project BantuBantu.
 | Storage:S3:Bucket | Storage__S3__Bucket | Nama bucket R2 privat |
 | Storage:S3:KeyPrefix | Storage__S3__KeyPrefix | Prefix object, misalnya `provider-documents` |
 | AllowedHosts | AllowedHosts | Host API yang diizinkan; misalnya `localhost` |
+| Logging:File:Path | Logging__File__Path | Prefix file JSONL rolling; production memakai `App_Data/logs/api` agar dapat diambil via SFTP |
+| Logging:File:MinimumLevel | Logging__File__MinimumLevel | Level minimum file log, misalnya `Information` |
+| Logging:File:RetainedFiles | Logging__File__RetainedFiles | Jumlah file rolling yang dipertahankan, default `14` |
+| Logging:File:MaxFileBytes | Logging__File__MaxFileBytes | Ukuran maksimum setiap file, default `10485760` |
 | — | ASPNETCORE_ENVIRONMENT | `Development` untuk membaca user-secrets |
 | — | ASPNETCORE_URLS | Misalnya `http://localhost:5080` |
 | AdminSeed:Email | AdminSeed__Email | Hanya untuk perintah seed admin |
@@ -158,6 +162,15 @@ Google verifier memvalidasi signature, audience, issuer, expiry melalui Google.A
 Provider dapat mendaftar melalui `POST /api/auth/provider/register`; akun baru berstatus `Draft`, otomatis menjadi direct talent tanpa agency, dan dapat melengkapi onboarding dari panel Provider. Admin tetap dapat membuat Provider langsung melalui `POST /api/admin/providers`, misalnya untuk talent internal. Aplikasi yang dikirim memiliki status `Submitted`, `NeedsChanges`, `Approved`, `Rejected`, atau `Suspended`; hanya Provider `Approved` dengan `VerificationStatus=Verified` yang tampil di marketplace. Platform Admin melihat semua aplikasi, sedangkan Agency Admin hanya melihat roster agency-nya. Email disimpan di `ProviderCredentials`, password memakai ASP.NET Identity PasswordHasher yang sama dengan admin. Provider login menghasilkan role `Provider` dan claim `providerId`; repository scope membatasi profil, ketersediaan, dan order ke Provider tersebut. Belum ada alur verifikasi email atau lupa password/email reset karena layanan email belum dikonfigurasi.
 
 Private key dibaca dari path konfigurasi atau Base64 PEM; mount dari secret manager dengan permission terbatas.
+
+API juga menulis structured JSON Lines ke prefix `Logging:File:Path`. Setiap baris
+memuat timestamp UTC, level, category, event id, exception (jika ada), dan
+`traceId`/activity id. File berganti setiap hari atau saat melewati batas ukuran
+dan file lama dipangkas sesuai `RetainedFiles`. Deployment MonsterASP
+mempertahankan `App_Data/logs/**` saat membersihkan `/wwwroot`, sehingga file
+dapat diambil setelah kejadian melalui SFTP. Respons error menyertakan
+`traceId` dan header `X-Correlation-ID`; kirim nilai header tersebut ketika
+melaporkan error agar baris log yang tepat mudah ditemukan.
 
 ## Wizard dan kategori
 
