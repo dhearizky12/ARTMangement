@@ -90,6 +90,19 @@ JWT_PUBLIC_KEY_FILE="$DEPLOY_SECRET_DIR/public.pem"
 
 
 # ------------------------------------------------------------
+# Resend sending key (least privilege)
+#
+# Created ONCE on the operator machine by scripts/provision-resend-key.sh from
+# the full-access master key that lives only in .env (RESEND_MASTER_API_KEY).
+# This script therefore reads the sending key from the file, never from .env,
+# and the master key is unset right after .env is sourced below.
+# ------------------------------------------------------------
+
+RESEND_API_KEY_FILE="$DEPLOY_SECRET_DIR/resend_api_key"
+RESEND_API_KEY_ID_FILE="$DEPLOY_SECRET_DIR/resend_api_key.id"
+
+
+# ------------------------------------------------------------
 # Storage
 #
 # Backend defaults to Local and requires Storage:RootPath.
@@ -221,6 +234,13 @@ set -a
 source "$ENV_FILE"
 
 set +a
+
+# RESEND_MASTER_API_KEY (the full-access Resend key) exists only so
+# scripts/provision-resend-key.sh can mint the sending-only key. .env is sourced
+# wholesale above under `set -a`, so drop it from this shell's exported
+# environment immediately: afterwards no child process of this script (python3,
+# lftp, curl, dotnet) can inherit it and nothing later can echo it.
+unset RESEND_MASTER_API_KEY
 
 echo "$ENV_FILE loaded."
 
@@ -410,6 +430,32 @@ export Jwt__PublicKeyBase64="$JWT_PUBLIC_KEY_BASE64"
 
 
 # ------------------------------------------------------------
+# Resend
+#
+# The sending-only key comes from the deploy-secrets directory (same handling
+# as the RSA private key), never from .env. It is exported under the ASP.NET
+# hierarchical name so the web.config injection below forwards it to IIS.
+#
+# RESEND_FROM is the configurable sender address and must belong to a domain
+# verified in Resend. EMAIL_VERIFICATION_ENABLED gates whether this deployment
+# sends mail at all; when true the key is mandatory (see validation below).
+# ------------------------------------------------------------
+
+RESEND_SENDING_KEY=""
+if [[ -f "$RESEND_API_KEY_FILE" ]]; then
+    RESEND_SENDING_KEY="$(cat "$RESEND_API_KEY_FILE")"
+fi
+
+export Resend__ApiKey="$RESEND_SENDING_KEY"
+export Resend__From="${RESEND_FROM:-}"
+export EmailVerification__Enabled="${EMAIL_VERIFICATION_ENABLED:-false}"
+
+# The raw shell copy is not needed any more; keep only the exported
+# configuration value that the web.config injector reads.
+unset RESEND_SENDING_KEY
+
+
+# ------------------------------------------------------------
 # Storage
 #
 # Program defaults to Local but requires RootPath
@@ -519,6 +565,27 @@ if ! [[ "$Jwt__RefreshDays" =~ ^[1-9][0-9]*$ ]]; then
 fi
 
 
+# ------------------------------------------------------------
+# Resend: sending-only key, required when this deployment sends mail
+#
+# The key is provisioned ONCE locally by scripts/provision-resend-key.sh and
+# restored in CI from the RESEND_SENDING_API_KEY GitHub secret. The full-access
+# master key is never read here.
+# ------------------------------------------------------------
+
+case "${EmailVerification__Enabled:-false}" in
+    [Tt][Rr][Uu][Ee])
+
+        [[ -n "${Resend__ApiKey:-}" ]] \
+            || fail "Resend__ApiKey kosong. Buat sending-only key dengan scripts/provision-resend-key.sh, lalu di CI: gh secret set RESEND_SENDING_API_KEY < $RESEND_API_KEY_FILE"
+
+        [[ -n "${Resend__From:-}" ]] \
+            || fail "Resend__From kosong. Set RESEND_FROM di .env dengan alamat pengirim pada domain Resend yang sudah diverifikasi."
+
+        ;;
+esac
+
+
 echo
 echo "Required application configuration OK."
 
@@ -539,6 +606,9 @@ echo "  Storage:RootPath       : $Storage__RootPath"
 echo "  Logging:File:Path      : $Logging__File__Path"
 echo "  Logging retention      : $Logging__File__RetainedFiles files"
 echo "  Database               : configured"
+echo "  EmailVerification      : ${EmailVerification__Enabled:-false}"
+echo "  Resend:ApiKey          : $(if [[ -n "${Resend__ApiKey:-}" ]]; then echo "configured ($(basename "$RESEND_API_KEY_FILE"))"; else echo "not set"; fi)"
+echo "  Resend:From            : ${Resend__From:-not set}"
 
 
 # ============================================================
@@ -687,6 +757,11 @@ variable_names = [
     # JWT RSA
     "Jwt__PrivateKeyBase64",
     "Jwt__PublicKeyBase64",
+
+    # Resend (sending-only key provisioned by scripts/provision-resend-key.sh)
+    "Resend__ApiKey",
+    "Resend__From",
+    "EmailVerification__Enabled",
 
     # Storage
     "Storage__Provider",
@@ -838,6 +913,8 @@ required = {
     "Storage__Provider",
 
     "Storage__RootPath",
+
+    "EmailVerification__Enabled",
 }
 
 
@@ -855,6 +932,22 @@ if missing:
     print(
         "ERROR: required configuration tidak terinject:",
         ", ".join(sorted(missing)),
+        file=sys.stderr
+    )
+
+    sys.exit(1)
+
+
+# ------------------------------------------------------------
+# Sending key is mandatory exactly when this deployment sends mail
+# ------------------------------------------------------------
+
+if values.get("EmailVerification__Enabled", "").lower() == "true" and not values.get("Resend__ApiKey"):
+
+    print(
+        "ERROR: EmailVerification__Enabled=true tetapi Resend__ApiKey tidak "
+        "terinject. Jalankan scripts/provision-resend-key.sh lalu "
+        "gh secret set RESEND_SENDING_API_KEY < .deploy/monsterasp/resend_api_key",
         file=sys.stderr
     )
 
@@ -898,6 +991,10 @@ safe_keys = [
     "Logging__File__MaxFileBytes",
 
     "AllowedHosts",
+
+    "EmailVerification__Enabled",
+
+    "Resend__From",
 ]
 
 
@@ -932,6 +1029,18 @@ print(
         "configured"
         if values.get("Jwt__PublicKeyBase64")
         else "MISSING"
+    )
+)
+
+#
+# The sending key is never printed, only its presence.
+#
+print(
+    "  Resend__ApiKey="
+    + (
+        "configured"
+        if values.get("Resend__ApiKey")
+        else "not set"
     )
 )
 PY
