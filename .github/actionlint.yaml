@@ -1,0 +1,10 @@
+# actionlint configuration.
+#
+# SC2129 (style: "consider using { cmd1; cmd2; } >> file") fires on the
+# "Reconstruct deploy environment" block in deploy.yml, which predates this CI
+# and is out of scope for this pass. Ignore it narrowly for that one workflow
+# only; every other shellcheck finding in every workflow still fails actionlint.
+paths:
+    .github/workflows/deploy.yml:
+        ignore:
+            - 'shellcheck reported issue in this script: SC2129:.+'
