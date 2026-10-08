@@ -3,18 +3,20 @@ import { wilayahApi, type VillageResult } from "../api/wilayahApi";
 export function AddressCombobox({
   onChange,
   required = true,
+  initialLabel = "",
 }: {
   onChange: (value: VillageResult | null) => void;
   required?: boolean;
+  initialLabel?: string;
 }) {
   const id = useId();
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialLabel);
   const [results, setResults] = useState<VillageResult[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [active, setActive] = useState(-1);
-  const selected = useRef(false);
+  const selected = useRef(Boolean(initialLabel));
   useEffect(() => {
     let stale = false;
     setResults([]);
