@@ -92,7 +92,6 @@ public class ProviderService(IMarketplaceRepository repo, ICurrentActor current,
     public async Task<ProviderAdminDto> OwnAddress(AddressRequest request, CancellationToken ct)
     {
         var actor = Provider(); var p = await Own(ct); EnsureEditable(p);
-        if (Step(p) == "personal") throw new ProfileException("Isi informasi personal terlebih dahulu.", 409);
         if (await wilayah.FindAsync(request.VillageId, ct) is null || request.AddressDetail.Trim().Length < 10) throw new ProfileException("Pilih wilayah valid dan lengkapi detail alamat.");
         p.VillageId = request.VillageId; p.AddressDetail = request.AddressDetail.Trim(); p.PostalCode = request.PostalCode; Invalidate(p);
         return await Saved(p, actor, "provider.address.self", ct);
@@ -113,7 +112,7 @@ public class ProviderService(IMarketplaceRepository repo, ICurrentActor current,
     private async Task<ProviderAdminDto> Saved(Provider p, Actor actor, string action, CancellationToken ct) { p.UpdatedAt = DateTimeOffset.UtcNow; repo.Audit(actor, p.Id, action, ""); await repo.SaveAsync(ct); return AdminMap(await repo.AdminProviderAsync(actor, p.Id, ct) ?? throw new ProfileException("Penyedia tidak ditemukan.", 404)); }
     private async Task<ProviderAdminDto> Saved(Provider p, string action, CancellationToken ct) => await Saved(p, Admin(), action, ct);
     public async Task<ProviderAdminDto> Personal(Guid id, ProviderPersonalRequest r, CancellationToken ct) { var p = await Owned(id, ct); ApplyPersonal(p, r); return await Saved(p, "provider.personal", ct); }
-    public async Task<ProviderAdminDto> Address(Guid id, AddressRequest r, CancellationToken ct) { var p = await Owned(id, ct); if (Step(p) == "personal") throw new ProfileException("Isi informasi personal terlebih dahulu.", 409); if (await wilayah.FindAsync(r.VillageId, ct) is null || r.AddressDetail.Trim().Length < 10) throw new ProfileException("Pilih wilayah valid dan lengkapi detail alamat."); p.VillageId = r.VillageId; p.AddressDetail = r.AddressDetail.Trim(); p.PostalCode = r.PostalCode; Invalidate(p); return await Saved(p, "provider.address", ct); }
+    public async Task<ProviderAdminDto> Address(Guid id, AddressRequest r, CancellationToken ct) { var p = await Owned(id, ct); if (await wilayah.FindAsync(r.VillageId, ct) is null || r.AddressDetail.Trim().Length < 10) throw new ProfileException("Pilih wilayah valid dan lengkapi detail alamat."); p.VillageId = r.VillageId; p.AddressDetail = r.AddressDetail.Trim(); p.PostalCode = r.PostalCode; Invalidate(p); return await Saved(p, "provider.address", ct); }
     public async Task<ProviderAdminDto> Document(Guid id, string type, Stream stream, long length, string contentType, CancellationToken ct)
     {
         var p = await Owned(id, ct);
@@ -121,7 +120,6 @@ public class ProviderService(IMarketplaceRepository repo, ICurrentActor current,
     }
     private async Task<ProviderAdminDto> SaveDocument(Provider p, Actor actor, string type, Stream stream, long length, string contentType, CancellationToken ct)
     {
-        if (Step(p) is "personal" or "address") throw new ProfileException("Lengkapi personal dan alamat terlebih dahulu.", 409);
         if (!images.Rules.DocumentTypes.Contains(type)) throw new ProfileException("Jenis dokumen harus KTP atau KK.");
         await using var normalized = await images.ValidateAndNormalizeAsync(stream, length, contentType, ct); var key = await files.StoreAsync(normalized, ct); var existing = p.Documents.SingleOrDefault(d => d.DocumentType == type); var old = existing?.StorageKey;
         if (existing is null) repo.AddDocument(new() { ProviderId = p.Id, Provider = p, DocumentType = type, StorageKey = key }); else { existing.StorageKey = key; existing.UploadedAt = DateTimeOffset.UtcNow; }
@@ -141,8 +139,8 @@ public class ProviderService(IMarketplaceRepository repo, ICurrentActor current,
     }
     private async Task<ProviderAdminDto> ApplyProfileAndSave(Provider p, Actor actor, ProviderProfileRequest r, string action, CancellationToken ct)
     {
-        if (Step(p) is "personal" or "address" or "documents") throw new ProfileException("Lengkapi personal, alamat, dan dokumen terlebih dahulu.", 409);
-        if (!await repo.CategoriesExistAsync(r.CategoryIds, ct) || r.Availability is null || r.Availability.Any(a => a is null) || r.Availability.Select(a => a.DayOfWeek).Distinct().Count() != 7 || !r.Availability.Any(a => a.IsAvailable)) throw new ProfileException("Kategori aktif dan tujuh hari ketersediaan diperlukan.");
+        if (r.CategoryIds.Length == 0 || !await repo.CategoriesExistAsync(r.CategoryIds, ct)) throw new ProfileException("Pilih minimal satu kategori layanan yang aktif.");
+        if (r.Availability is null || r.Availability.Any(a => a is null) || r.Availability.Select(a => a.DayOfWeek).Distinct().Count() != 7 || !r.Availability.Any(a => a.IsAvailable)) throw new ProfileException("Isi ketersediaan untuk tujuh hari dan pilih minimal satu hari aktif.");
         if (decimal.Round(r.Price, 2) != r.Price) throw new ProfileException("Tarif maksimal dua angka desimal.");
         var skills = Tags(r.Skills); var languages = Tags(r.Languages);
         p.Categories.RemoveAll(c => !r.CategoryIds.Contains(c.ServiceCategoryId)); foreach (var c in r.CategoryIds.Except(p.Categories.Select(c => c.ServiceCategoryId)).ToArray()) p.Categories.Add(new() { ProviderId = p.Id, ServiceCategoryId = c });

@@ -93,6 +93,16 @@ export function documentsFromForm(form: FormData): DocumentsDraft {
 export function pristineDocuments(): DocumentsDraft {
   return { documentType: "KTP", fileName: "" };
 }
+export const REQUIRED_DOCUMENT_TYPES = ["KTP", "KK"] as const;
+export function missingDocumentType(
+  documents: { documentType: string }[],
+): string {
+  return (
+    REQUIRED_DOCUMENT_TYPES.find(
+      (t) => !documents.some((d) => d.documentType === t),
+    ) ?? "KTP"
+  );
+}
 export function profileFromForm(form: FormData): ProfileDraft {
   return {
     categoryIds: form.getAll("categories").map(String).sort(),
@@ -143,7 +153,7 @@ export function isSectionDirty(
     }
     case "documents": {
       const d = draft as DocumentsDraft;
-      return d.documentType !== "KTP" || d.fileName !== "";
+      return d.fileName !== "";
     }
     case "profile":
       return !equal(draft as ProfileDraft, pristineProfile(data));
@@ -384,20 +394,37 @@ export function DocumentsForm({
         Unggah KTP dan KK. Foto minimal 100 × 100 piksel, JPG/PNG maksimal 5 MB.
         Dokumen hanya dapat dibuka admin yang berwenang.
       </p>
-      {data.documents.map((d) => (
-        <p key={d.id}>
-          {d.documentType} tersimpan{" "}
-          <Button variant="ghost" onClick={() => download(d.id)}>
-            Unduh {d.documentType}
-          </Button>
-        </p>
-      ))}
-      <form ref={formRef} onChange={capture} onSubmit={submit}>
+      {REQUIRED_DOCUMENT_TYPES.map((t) => {
+        const doc = data.documents.find((d) => d.documentType === t);
+        return (
+          <p key={t}>
+            {t} {doc ? "tersimpan" : "belum diunggah"}{" "}
+            {doc && (
+              <Button variant="ghost" onClick={() => download(doc.id)}>
+                Unduh {t}
+              </Button>
+            )}
+          </p>
+        );
+      })}
+      <form
+        key={
+          data.documents
+            .map((d) => `${d.documentType}:${d.id}:${d.uploadedAt}`)
+            .sort()
+            .join(",") || "none"
+        }
+        ref={formRef}
+        onChange={capture}
+        onSubmit={submit}
+      >
         <fieldset disabled={busy}>
           <Select
             label="Jenis dokumen"
             name="documentType"
-            defaultValue={draftDoc?.documentType ?? "KTP"}
+            defaultValue={
+              draftDoc?.documentType ?? missingDocumentType(data.documents)
+            }
           >
             <option>KTP</option>
             <option>KK</option>
@@ -433,6 +460,7 @@ export function ProfileForm({
   const draftProfile = draft as ProfileDraft | undefined;
   const categories = useCategories();
   const formRef = useRef<HTMLFormElement | null>(null);
+  const [error, setError] = useState("");
   const checkedDays = draftProfile?.days;
   function capture() {
     if (!onDraftChange || !formRef.current) return;
@@ -445,8 +473,22 @@ export function ProfileForm({
       onSubmit={(e) => {
         e.preventDefault();
         const fd = new FormData(e.currentTarget);
+        const categoryIds = fd.getAll("categories").map(String);
+        const availability = days.map((day) => ({
+          dayOfWeek: day,
+          isAvailable: fd.has(day),
+        }));
+        if (categoryIds.length === 0) {
+          setError("Pilih minimal satu kategori layanan yang aktif.");
+          return;
+        }
+        if (!availability.some((a) => a.isAvailable)) {
+          setError("Pilih minimal satu hari aktif ketersediaan.");
+          return;
+        }
+        setError("");
         void save("profile", {
-          categoryIds: fd.getAll("categories"),
+          categoryIds,
           skills: String(fd.get("skills"))
             .split(",")
             .map((x) => x.trim())
@@ -457,10 +499,7 @@ export function ProfileForm({
             .filter(Boolean),
           pricingType: fd.get("pricingType"),
           price: Number(fd.get("price")),
-          availability: days.map((day) => ({
-            dayOfWeek: day,
-            isAvailable: fd.has(day),
-          })),
+          availability,
         });
       }}
     >
@@ -531,6 +570,11 @@ export function ProfileForm({
             {dayNames[day]}
           </label>
         ))}
+        {error && (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        )}
         <Button type="submit" className="wide">
           Simpan profil layanan
         </Button>
