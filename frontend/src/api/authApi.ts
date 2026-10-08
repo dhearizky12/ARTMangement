@@ -8,7 +8,13 @@ export interface User {
   agencyId?: string | null;
   profileCompleted: boolean;
   profileStep: "personal" | "address" | "documents" | "done";
-  applicationStatus?: "Draft" | "Submitted" | "NeedsChanges" | "Approved" | "Rejected" | "Suspended";
+  applicationStatus?:
+    | "Draft"
+    | "Submitted"
+    | "NeedsChanges"
+    | "Approved"
+    | "Rejected"
+    | "Suspended";
 }
 export interface Session {
   accessToken: string;
@@ -17,6 +23,7 @@ export interface Session {
   refreshToken: string;
   refreshExpiresAt: string;
 }
+import { clearAllOnboardingDrafts } from "../lib/draftStorage";
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -87,7 +94,11 @@ export class AuthApi {
     });
     this.setSession(s);
   }
-  async registerProvider(email: string, password: string, confirmPassword: string) {
+  async registerProvider(
+    email: string,
+    password: string,
+    confirmPassword: string,
+  ) {
     const s = await this.request<Session>("/api/auth/provider/register", {
       email,
       password,
@@ -131,6 +142,7 @@ export class AuthApi {
         refreshToken: this.session.refreshToken,
       });
     this.setSession(null);
+    clearAllOnboardingDrafts();
   }
   updateUser(user: Partial<User>) {
     if (this.session)

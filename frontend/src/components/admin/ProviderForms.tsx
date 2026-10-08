@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { Button, Input, Select, Textarea } from "../ui";
 import { AddressCombobox } from "../AddressCombobox";
 import { ResourceState } from "../ResourceState";
@@ -11,24 +11,173 @@ import {
 } from "../../api/marketplaceApi";
 import { authApi } from "../../api/authApi";
 import type { VillageResult } from "../../api/wilayahApi";
+import type {
+  AddressDraft,
+  DocumentsDraft,
+  Drafts,
+  PersonalDraft,
+  ProfileDraft,
+  SectionId,
+} from "../../lib/draftStorage";
 export interface FormProps {
   data: ProviderAdmin;
   save: (step: string, body: unknown) => Promise<void>;
   busy: boolean;
   downloadDocument?: (id: string) => Promise<Blob>;
+  draft?: Drafts[SectionId];
+  onDraftChange?: (id: SectionId, draft: Drafts[SectionId]) => void;
 }
-export function PersonalForm({ data, save, busy }: FormProps) {
+
+function str(v: FormDataEntryValue | null): string {
+  return typeof v === "string" ? v : "";
+}
+function normList(v: FormDataEntryValue | null): string {
+  return String(v ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join(", ");
+}
+function normNum(v: FormDataEntryValue | number | null): string {
+  return String(Number(v ?? 0));
+}
+function equal(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+export function personalFromForm(form: FormData): PersonalDraft {
+  return {
+    fullName: str(form.get("fullName")),
+    age: str(form.get("age")),
+    bio: str(form.get("bio")),
+    experience: str(form.get("experience")),
+  };
+}
+export function pristinePersonal(data: ProviderAdmin): PersonalDraft {
   const p = data.provider;
+  return {
+    fullName: p.fullName,
+    age: p.age >= 18 ? String(p.age) : "",
+    bio: p.bio,
+    experience: p.yearsOfExperience > 0 ? String(p.yearsOfExperience) : "",
+  };
+}
+export function addressFromForm(
+  form: FormData,
+  village: { villageId: string; villageLabel: string },
+): AddressDraft {
+  return {
+    addressDetail: str(form.get("addressDetail")),
+    postalCode: str(form.get("postalCode")),
+    villageId: village.villageId,
+    villageLabel: village.villageLabel,
+  };
+}
+export function pristineAddress(data: ProviderAdmin): AddressDraft {
+  return {
+    addressDetail: data.addressDetail,
+    postalCode: data.postalCode,
+    villageId: data.villageId ?? "",
+    villageLabel: data.provider.location ?? "",
+  };
+}
+export function documentsFromForm(form: FormData): DocumentsDraft {
+  const raw = form.get("file");
+  const file = raw instanceof File && raw.size > 0 ? raw : undefined;
+  return {
+    documentType: str(form.get("documentType")) || "KTP",
+    fileName: file ? file.name : "",
+    file,
+  };
+}
+export function pristineDocuments(): DocumentsDraft {
+  return { documentType: "KTP", fileName: "" };
+}
+export function profileFromForm(form: FormData): ProfileDraft {
+  return {
+    categoryIds: form.getAll("categories").map(String).sort(),
+    skills: normList(form.get("skills")),
+    languages: normList(form.get("languages")),
+    pricingType: str(form.get("pricingType")),
+    price: normNum(form.get("price")),
+    days: days.filter((d) => form.has(d)),
+  };
+}
+export function pristineProfile(data: ProviderAdmin): ProfileDraft {
+  const p = data.provider;
+  return {
+    categoryIds: p.categories.map((c) => c.id).sort(),
+    skills: normList(p.skills.join(", ")),
+    languages: normList(p.languages.join(", ")),
+    pricingType: p.pricingType,
+    price: normNum(p.price),
+    days: days.filter((d) =>
+      p.availability.some((a) => a.dayOfWeek === d && a.isAvailable),
+    ),
+  };
+}
+export function isSectionDirty(
+  id: SectionId,
+  draft: Drafts[SectionId] | undefined,
+  data: ProviderAdmin,
+): boolean {
+  if (!draft) return false;
+  switch (id) {
+    case "personal":
+      return !equal(draft as PersonalDraft, pristinePersonal(data));
+    case "address": {
+      const a = draft as AddressDraft;
+      const p = pristineAddress(data);
+      return !equal(
+        {
+          villageId: a.villageId,
+          addressDetail: a.addressDetail,
+          postalCode: a.postalCode,
+        },
+        {
+          villageId: p.villageId,
+          addressDetail: p.addressDetail,
+          postalCode: p.postalCode,
+        },
+      );
+    }
+    case "documents": {
+      const d = draft as DocumentsDraft;
+      return d.documentType !== "KTP" || d.fileName !== "";
+    }
+    case "profile":
+      return !equal(draft as ProfileDraft, pristineProfile(data));
+    default:
+      return false;
+  }
+}
+
+export function PersonalForm({
+  data,
+  save,
+  busy,
+  draft,
+  onDraftChange,
+}: FormProps) {
+  const p = data.provider;
+  const d = draft as PersonalDraft | undefined;
+  const formRef = useRef<HTMLFormElement | null>(null);
+  function capture() {
+    if (!onDraftChange || !formRef.current) return;
+    onDraftChange("personal", personalFromForm(new FormData(formRef.current)));
+  }
   return (
     <form
+      ref={formRef}
+      onChange={capture}
       onSubmit={(e) => {
         e.preventDefault();
-        const d = new FormData(e.currentTarget);
+        const fd = new FormData(e.currentTarget);
         void save("personal-info", {
-          fullName: d.get("fullName"),
-          age: Number(d.get("age")),
-          bio: d.get("bio"),
-          yearsOfExperience: Number(d.get("experience")),
+          fullName: fd.get("fullName"),
+          age: Number(fd.get("age")),
+          bio: fd.get("bio"),
+          yearsOfExperience: Number(fd.get("experience")),
         });
       }}
     >
@@ -36,7 +185,7 @@ export function PersonalForm({ data, save, busy }: FormProps) {
         <Input
           label="Nama lengkap"
           name="fullName"
-          defaultValue={p.fullName}
+          defaultValue={d?.fullName ?? p.fullName}
           required
           minLength={2}
           maxLength={120}
@@ -45,15 +194,17 @@ export function PersonalForm({ data, save, busy }: FormProps) {
           label="Usia"
           name="age"
           type="number"
+          inputMode="numeric"
           min={18}
           max={80}
-          defaultValue={p.age || 18}
+          placeholder="Contoh: 30"
+          defaultValue={d?.age ?? (p.age >= 18 ? String(p.age) : "")}
           required
         />
         <Textarea
           label="Tentang penyedia"
           name="bio"
-          defaultValue={p.bio}
+          defaultValue={d?.bio ?? p.bio}
           required
           minLength={10}
           maxLength={2000}
@@ -62,34 +213,63 @@ export function PersonalForm({ data, save, busy }: FormProps) {
           label="Pengalaman (tahun)"
           name="experience"
           type="number"
+          inputMode="numeric"
           min={0}
           max={62}
-          defaultValue={p.yearsOfExperience}
-          required
+          placeholder="Contoh: 5"
+          defaultValue={
+            d?.experience ??
+            (p.yearsOfExperience > 0 ? String(p.yearsOfExperience) : "")
+          }
         />
-        <Button type="submit">Simpan informasi personal</Button>
+        <Button type="submit" className="wide">
+          Simpan informasi personal
+        </Button>
       </fieldset>
     </form>
   );
 }
-export function ProviderAddressForm({ data, save, busy }: FormProps) {
-  const [village, setVillage] = useState<VillageResult | null>(null);
-  const [changed, setChanged] = useState(false);
+export function ProviderAddressForm({
+  data,
+  save,
+  busy,
+  draft,
+  onDraftChange,
+}: FormProps) {
+  const draftAddress = draft as AddressDraft | undefined;
+  const initialId = draftAddress?.villageId ?? data.villageId ?? "";
+  const initialLabel =
+    draftAddress?.villageLabel ?? data.provider.location ?? "";
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const villageRef = useRef({
+    villageId: initialId,
+    villageLabel: initialLabel,
+  });
+  const [villageId, setVillageId] = useState(initialId);
+  const [label, setLabel] = useState(initialLabel);
   const [error, setError] = useState("");
+  function capture(extra = villageRef.current) {
+    if (!onDraftChange || !formRef.current) return;
+    onDraftChange(
+      "address",
+      addressFromForm(new FormData(formRef.current), extra),
+    );
+  }
   return (
     <form
+      ref={formRef}
+      onChange={() => capture()}
       onSubmit={(e) => {
         e.preventDefault();
-        const id = village?.villageId || (!changed ? data.villageId : null);
-        if (!id) {
+        if (!villageId) {
           setError("Pilih wilayah dari hasil pencarian.");
           return;
         }
-        const d = new FormData(e.currentTarget);
+        const fd = new FormData(e.currentTarget);
         void save("address", {
-          villageId: id,
-          addressDetail: d.get("addressDetail"),
-          postalCode: d.get("postalCode"),
+          villageId,
+          addressDetail: fd.get("addressDetail"),
+          postalCode: fd.get("postalCode"),
         });
       }}
     >
@@ -98,11 +278,18 @@ export function ProviderAddressForm({ data, save, busy }: FormProps) {
           <p>Wilayah tersimpan: {data.provider.location}</p>
         )}
         <AddressCombobox
-          required={!data.villageId || changed}
+          required={!villageId}
+          initialLabel={label}
           onChange={(v) => {
-            setChanged(true);
-            setVillage(v);
             setError("");
+            setVillageId(v?.villageId ?? "");
+            setLabel(v?.displayLabel ?? "");
+            const next = {
+              villageId: v?.villageId ?? "",
+              villageLabel: v?.displayLabel ?? "",
+            };
+            villageRef.current = next;
+            capture(next);
           }}
         />
         <Textarea
@@ -111,7 +298,7 @@ export function ProviderAddressForm({ data, save, busy }: FormProps) {
           required
           minLength={10}
           maxLength={500}
-          defaultValue={data.addressDetail}
+          defaultValue={draftAddress?.addressDetail ?? data.addressDetail}
         />
         <Input
           label="Kode pos"
@@ -120,20 +307,48 @@ export function ProviderAddressForm({ data, save, busy }: FormProps) {
           pattern="[0-9]{5}"
           inputMode="numeric"
           maxLength={5}
-          defaultValue={data.postalCode}
+          defaultValue={draftAddress?.postalCode ?? data.postalCode}
         />
-        {error && <p role="alert">{error}</p>}
-        <Button type="submit">Simpan alamat</Button>
+        {error && (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        )}
+        <Button type="submit" className="wide">
+          Simpan alamat
+        </Button>
       </fieldset>
     </form>
   );
 }
-export function DocumentsForm({ data, save, busy, downloadDocument }: FormProps) {
+export function DocumentsForm({
+  data,
+  save,
+  busy,
+  downloadDocument,
+  draft,
+  onDraftChange,
+}: FormProps) {
+  const draftDoc = draft as DocumentsDraft | undefined;
+  const formRef = useRef<HTMLFormElement | null>(null);
   const [error, setError] = useState("");
+  const hasFile = Boolean(draftDoc?.file && draftDoc.file.size > 0);
+  function capture() {
+    if (!onDraftChange || !formRef.current) return;
+    onDraftChange(
+      "documents",
+      documentsFromForm(new FormData(formRef.current)),
+    );
+  }
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const body = new FormData(e.currentTarget);
-    const file = body.get("file") as File;
+    const picked = body.get("file");
+    const pickedFile =
+      picked instanceof File && picked.size > 0 ? picked : null;
+    const file =
+      pickedFile ??
+      (draftDoc?.file && draftDoc.file.size > 0 ? draftDoc.file : null);
     if (
       !file ||
       file.size > 5 * 1024 * 1024 ||
@@ -142,6 +357,7 @@ export function DocumentsForm({ data, save, busy, downloadDocument }: FormProps)
       setError("Gunakan JPG/PNG maksimal 5 MB.");
       return;
     }
+    body.set("file", file);
     setError("");
     await save("documents", body);
   }
@@ -149,7 +365,9 @@ export function DocumentsForm({ data, save, busy, downloadDocument }: FormProps)
     try {
       const blob = await (downloadDocument
         ? downloadDocument(id)
-        : authApi.download(`/api/admin/providers/${data.provider.id}/documents/${id}`));
+        : authApi.download(
+            `/api/admin/providers/${data.provider.id}/documents/${id}`,
+          ));
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -174,9 +392,13 @@ export function DocumentsForm({ data, save, busy, downloadDocument }: FormProps)
           </Button>
         </p>
       ))}
-      <form onSubmit={submit}>
+      <form ref={formRef} onChange={capture} onSubmit={submit}>
         <fieldset disabled={busy}>
-          <Select label="Jenis dokumen" name="documentType">
+          <Select
+            label="Jenis dokumen"
+            name="documentType"
+            defaultValue={draftDoc?.documentType ?? "KTP"}
+          >
             <option>KTP</option>
             <option>KK</option>
           </Select>
@@ -185,38 +407,59 @@ export function DocumentsForm({ data, save, busy, downloadDocument }: FormProps)
             name="file"
             type="file"
             accept="image/jpeg,image/png"
-            required
+            required={!hasFile}
           />
-          {error && <p role="alert">{error}</p>}
-          <Button type="submit">Unggah dokumen</Button>
+          {error && (
+            <p className="error" role="alert">
+              {error}
+            </p>
+          )}
+          <Button type="submit" className="wide">
+            Unggah dokumen
+          </Button>
         </fieldset>
       </form>
     </>
   );
 }
-export function ProfileForm({ data, save, busy }: FormProps) {
+export function ProfileForm({
+  data,
+  save,
+  busy,
+  draft,
+  onDraftChange,
+}: FormProps) {
   const p = data.provider;
+  const draftProfile = draft as ProfileDraft | undefined;
   const categories = useCategories();
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const checkedDays = draftProfile?.days;
+  function capture() {
+    if (!onDraftChange || !formRef.current) return;
+    onDraftChange("profile", profileFromForm(new FormData(formRef.current)));
+  }
   return (
     <form
+      ref={formRef}
+      onChange={capture}
       onSubmit={(e) => {
         e.preventDefault();
-        const d = new FormData(e.currentTarget);
+        const fd = new FormData(e.currentTarget);
         void save("profile", {
-          categoryIds: d.getAll("categories"),
-          skills: String(d.get("skills"))
+          categoryIds: fd.getAll("categories"),
+          skills: String(fd.get("skills"))
             .split(",")
             .map((x) => x.trim())
             .filter(Boolean),
-          languages: String(d.get("languages"))
+          languages: String(fd.get("languages"))
             .split(",")
             .map((x) => x.trim())
             .filter(Boolean),
-          pricingType: d.get("pricingType"),
-          price: Number(d.get("price")),
+          pricingType: fd.get("pricingType"),
+          price: Number(fd.get("price")),
           availability: days.map((day) => ({
             dayOfWeek: day,
-            isAvailable: d.has(day),
+            isAvailable: fd.has(day),
           })),
         });
       }}
@@ -230,7 +473,11 @@ export function ProfileForm({ data, save, busy }: FormProps) {
               type="checkbox"
               name="categories"
               value={c.id}
-              defaultChecked={p.categories.some((x) => x.id === c.id)}
+              defaultChecked={
+                draftProfile
+                  ? draftProfile.categoryIds.includes(c.id)
+                  : p.categories.some((x) => x.id === c.id)
+              }
             />
             {c.name}
           </label>
@@ -238,21 +485,21 @@ export function ProfileForm({ data, save, busy }: FormProps) {
         <Input
           label="Keahlian (pisahkan dengan koma)"
           name="skills"
-          defaultValue={p.skills.join(", ")}
+          defaultValue={draftProfile?.skills ?? p.skills.join(", ")}
           maxLength={1600}
           required
         />
         <Input
           label="Bahasa (pisahkan dengan koma)"
           name="languages"
-          defaultValue={p.languages.join(", ")}
+          defaultValue={draftProfile?.languages ?? p.languages.join(", ")}
           maxLength={800}
           required
         />
         <Select
           label="Model tarif"
           name="pricingType"
-          defaultValue={p.pricingType}
+          defaultValue={draftProfile?.pricingType ?? p.pricingType}
         >
           <option value="PerVisit">Per kunjungan</option>
           <option value="PerMonth">Per bulan</option>
@@ -264,7 +511,7 @@ export function ProfileForm({ data, save, busy }: FormProps) {
           min={1}
           max={999999999}
           step="0.01"
-          defaultValue={p.price || ""}
+          defaultValue={draftProfile?.price ?? (p.price || "")}
           required
         />
         <h3>Ketersediaan mingguan</h3>
@@ -273,14 +520,20 @@ export function ProfileForm({ data, save, busy }: FormProps) {
             <input
               type="checkbox"
               name={day}
-              defaultChecked={p.availability.some(
-                (a) => a.dayOfWeek === day && a.isAvailable,
-              )}
+              defaultChecked={
+                checkedDays
+                  ? checkedDays.includes(day)
+                  : p.availability.some(
+                      (a) => a.dayOfWeek === day && a.isAvailable,
+                    )
+              }
             />
             {dayNames[day]}
           </label>
         ))}
-        <Button type="submit">Simpan profil layanan</Button>
+        <Button type="submit" className="wide">
+          Simpan profil layanan
+        </Button>
       </fieldset>
     </form>
   );
@@ -291,13 +544,13 @@ export function VerificationForm({ data, save, busy }: FormProps) {
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        const d = new FormData(e.currentTarget);
+        const fd = new FormData(e.currentTarget);
         void save("verify", {
-          identityVerified: d.has("identity"),
-          backgroundCheckPassed: d.has("background"),
-          contractSigned: d.has("contract"),
-          status: d.get("status"),
-          note: d.get("note"),
+          identityVerified: fd.has("identity"),
+          backgroundCheckPassed: fd.has("background"),
+          contractSigned: fd.has("contract"),
+          status: fd.get("status"),
+          note: fd.get("note"),
         });
       }}
     >

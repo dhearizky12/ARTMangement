@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ProviderLayout } from "../components/provider/ProviderLayout";
 import { Badge, Button, Card } from "../components/ui";
@@ -10,12 +10,19 @@ import {
   PersonalForm,
   ProfileForm,
   ProviderAddressForm,
+  isSectionDirty,
 } from "../components/admin/ProviderForms";
 import {
   providerApi,
   type ApplicationSection,
   type ProviderApplication,
 } from "../api/marketplaceApi";
+import {
+  loadDrafts,
+  saveDrafts,
+  type Drafts,
+  type SectionId,
+} from "../lib/draftStorage";
 
 const steps = [
   { id: "personal", label: "Personal", Form: PersonalForm },
@@ -30,8 +37,19 @@ const statusLabels: Record<ApplicationSection["status"], string> = {
   lengkapi: "Lengkap",
 };
 
+const sectionBySaveStep: Record<string, SectionId> = {
+  "personal-info": "personal",
+  personal: "personal",
+  address: "address",
+  documents: "documents",
+  profile: "profile",
+};
+
 export function ProviderOnboardingPage() {
-  const application = useResource(providerApi.application, "provider-application");
+  const application = useResource(
+    providerApi.application,
+    "provider-application",
+  );
   const [params, setParams] = useSearchParams();
   const urlStep = params.get("step");
   const [step, setStep] = useState<string>("personal");
@@ -39,6 +57,42 @@ export function ProviderOnboardingPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const data = application.data;
+  const providerId = data?.provider.provider.id ?? "";
+  const draftsRef = useRef<Drafts>({});
+  const [drafts, setDrafts] = useState<Drafts>({});
+  const [hydrated, setHydrated] = useState(false);
+
+  useLayoutEffect(() => {
+    if (!providerId) return;
+    const loaded = loadDrafts(providerId);
+    draftsRef.current = loaded;
+    setDrafts(loaded);
+    setHydrated(true);
+  }, [providerId]);
+
+  function persist(next: Drafts) {
+    if (providerId) saveDrafts(providerId, next);
+  }
+  function onDraftChange(id: SectionId, draft: Drafts[SectionId]) {
+    const next = { ...draftsRef.current, [id]: draft } as Drafts;
+    draftsRef.current = next;
+    setDrafts(next);
+    persist(next);
+  }
+  function clearDraft(id: SectionId) {
+    const next = { ...draftsRef.current };
+    delete next[id];
+    draftsRef.current = next;
+    setDrafts(next);
+    persist(next);
+  }
+  function clearAllDrafts() {
+    const next: Drafts = {};
+    draftsRef.current = next;
+    setDrafts(next);
+    persist(next);
+  }
+
   const dataStep = data?.canEdit
     ? data.step === "verify"
       ? "profile"
@@ -64,6 +118,8 @@ export function ProviderOnboardingPage() {
       if (currentStep === "profile") await providerApi.profileDetails(body);
       if (currentStep === "documents")
         await providerApi.documents(body as FormData);
+      const section = sectionBySaveStep[currentStep];
+      if (section) clearDraft(section);
       const fresh = await application.reload();
       const firstIncomplete = fresh?.sections.find(
         (s) => s.status !== "lengkapi",
@@ -83,6 +139,7 @@ export function ProviderOnboardingPage() {
     try {
       await providerApi.submit();
       await application.reload();
+      clearAllDrafts();
       setMessage("Aplikasi berhasil dikirim dan sedang ditinjau admin.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Aplikasi gagal dikirim.");
@@ -104,7 +161,7 @@ export function ProviderOnboardingPage() {
       <p className="eyebrow">PENDAFTARAN PENYEDIA JASA</p>
       <h1>Lengkapi profil Anda</h1>
       <ResourceState {...application} />
-      {data && (
+      {data && hydrated && (
         <ApplicationEditor
           data={data}
           current={current}
@@ -114,6 +171,8 @@ export function ProviderOnboardingPage() {
           busy={busy}
           message={message}
           error={error}
+          drafts={drafts}
+          onDraftChange={onDraftChange}
         />
       )}
     </ProviderLayout>
@@ -129,6 +188,8 @@ function ApplicationEditor({
   busy,
   message,
   error,
+  drafts,
+  onDraftChange,
 }: {
   data: ProviderApplication;
   current: (typeof steps)[number];
@@ -138,23 +199,89 @@ function ApplicationEditor({
   busy: boolean;
   message: string;
   error: string;
+  drafts: Drafts;
+  onDraftChange: (id: SectionId, draft: Drafts[SectionId]) => void;
 }) {
+  const activeTabRef = useRef<HTMLButtonElement | null>(null);
   const canEdit = data.canEdit;
   const sections = data.sections;
   const missing = steps.filter(
     (s) => sections.find((x) => x.id === s.id)?.status !== "lengkapi",
   );
   const allComplete = missing.length === 0;
+  const anyDirty = steps.some((s) =>
+    isSectionDirty(s.id, drafts[s.id], data.provider),
+  );
+
+  useEffect(() => {
+    activeTabRef.current?.scrollIntoView({
+      block: "nearest",
+      inline: "nearest",
+    });
+  }, [current.id]);
+
+  useEffect(() => {
+    if (!canEdit || !anyDirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    const onClick = (e: MouseEvent) => {
+      if (
+        e.defaultPrevented ||
+        e.button !== 0 ||
+        e.metaKey ||
+        e.ctrlKey ||
+        e.shiftKey ||
+        e.altKey
+      )
+        return;
+      const target = e.target as Element | null;
+      const anchor = target?.closest?.("a");
+      if (!anchor) return;
+      const href = anchor.getAttribute("href");
+      if (!href || href.startsWith("#")) return;
+      let url: URL;
+      try {
+        url = new URL(anchor.href, window.location.href);
+      } catch {
+        return;
+      }
+      if (url.origin !== window.location.origin) return;
+      if (url.pathname === window.location.pathname) return;
+      if (
+        !window.confirm(
+          "Ada perubahan yang belum disimpan. Yakin ingin meninggalkan halaman?",
+        )
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    document.addEventListener("click", onClick, true);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      document.removeEventListener("click", onClick, true);
+    };
+  }, [canEdit, anyDirty]);
+
   return (
     <>
-      <ul className="step-tabs" role="tablist" aria-label="Tahap pendaftaran Provider">
+      <ul
+        className="step-tabs"
+        role="tablist"
+        aria-label="Tahap pendaftaran Provider"
+      >
         {steps.map((item) => {
           const section = sections.find((x) => x.id === item.id);
           const status = section?.status ?? "belum";
           const selected = item.id === current.id;
+          const dirty = isSectionDirty(item.id, drafts[item.id], data.provider);
           return (
             <li key={item.id}>
               <button
+                ref={selected ? activeTabRef : undefined}
                 type="button"
                 role="tab"
                 aria-selected={selected}
@@ -162,17 +289,18 @@ function ApplicationEditor({
                 disabled={busy}
                 onClick={() => goTo(item.id)}
               >
-                <span>
+                <span className="step-tab-num">
                   {status === "lengkapi" ? (
-                    <Check size={18} aria-hidden="true" />
+                    <Check size={16} aria-hidden="true" />
                   ) : (
                     steps.indexOf(item) + 1
                   )}
-                  {item.label}
                 </span>
-                <span className="step-tab-status">
-                  {statusLabels[status]}
-                </span>
+                <span className="step-tab-label">{item.label}</span>
+                <span className="step-tab-status">{statusLabels[status]}</span>
+                {dirty && (
+                  <span className="step-tab-dirty">belum disimpan</span>
+                )}
               </button>
             </li>
           );
@@ -198,6 +326,8 @@ function ApplicationEditor({
             save={save}
             busy={busy}
             downloadDocument={providerApi.downloadDocument}
+            draft={drafts[current.id]}
+            onDraftChange={onDraftChange}
           />
         ) : (
           <p>
@@ -206,30 +336,32 @@ function ApplicationEditor({
           </p>
         )}
         {canEdit && (
-          <div className="action-stack">
-            <Button
-              type="button"
-              variant="secondary"
-              className="wide"
-              disabled={busy || !allComplete}
-              onClick={() => void submit()}
-            >
-              {busy ? "Mengirim…" : "Kirim aplikasi"}
-            </Button>
-            {!allComplete && (
-              <p className="submit-hint">
-                Belum lengkap:{" "}
-                {missing.map((m, i) => (
-                  <span key={m.id}>
-                    {i > 0 && ", "}
-                    <Link to={`/provider/onboarding?step=${m.id}`}>
-                      {m.label}
-                    </Link>
-                  </span>
-                ))}
-                .
-              </p>
-            )}
+          <div className="submit-block">
+            <div className="action-stack">
+              <Button
+                type="button"
+                variant="secondary"
+                className="wide"
+                disabled={busy || !allComplete}
+                onClick={() => void submit()}
+              >
+                {busy ? "Mengirim…" : "Kirim aplikasi"}
+              </Button>
+              {!allComplete && (
+                <p className="submit-hint">
+                  Belum lengkap:{" "}
+                  {missing.map((m, i) => (
+                    <span key={m.id}>
+                      {i > 0 && ", "}
+                      <Link to={`/provider/onboarding?step=${m.id}`}>
+                        {m.label}
+                      </Link>
+                    </span>
+                  ))}
+                  .
+                </p>
+              )}
+            </div>
           </div>
         )}
       </Card>
