@@ -25,6 +25,13 @@ if (!seedMode)
     if (storageProvider.Equals("S3", StringComparison.OrdinalIgnoreCase))
         foreach (var key in new[] { "Storage:S3:ServiceUrl", "Storage:S3:AccessKey", "Storage:S3:SecretKey", "Storage:S3:Bucket" })
             if (string.IsNullOrWhiteSpace(builder.Configuration[key])) throw new InvalidOperationException($"Missing configuration: {key}");
+    // Email verification needs a sending-only Resend key (Resend:ApiKey) and a
+    // from-address on a verified domain. Both are required exactly when this
+    // environment is allowed to send mail; deploy-be.sh enforces the same rule.
+    if (string.Equals(builder.Configuration["EmailVerification:Enabled"], "true", StringComparison.OrdinalIgnoreCase))
+        foreach (var key in new[] { "Resend:ApiKey", "Resend:From" })
+            if (string.IsNullOrWhiteSpace(builder.Configuration[key]))
+                throw new InvalidOperationException($"Missing configuration: {key} (required when EmailVerification:Enabled=true). Run scripts/provision-resend-key.sh and set RESEND_FROM.");
     foreach (var key in new[] { "Jwt:AccessMinutes", "Jwt:RefreshDays" }) if (!int.TryParse(builder.Configuration[key], out var value) || value < 1) throw new InvalidOperationException($"Invalid configuration: {key}");
 }
 builder.Logging.AddProvider(new JsonFileLoggerProvider(builder.Configuration));
@@ -34,6 +41,13 @@ builder.Services.AddSingleton<IDocumentProcessor, DocumentProcessor>();
 builder.Services.AddSingleton<IFileStorage>(_ => storageProvider.Equals("S3", StringComparison.OrdinalIgnoreCase)
     ? new S3FileStorage(builder.Configuration)
     : new LocalFileStorage(builder.Configuration));
+// Email: Development logs instead of sending (no Resend key needed locally).
+// Everywhere else mail goes through Resend with the sending-only key from
+// Resend:ApiKey; the sender address comes from the configurable Resend:From.
+if (builder.Environment.EnvironmentName == "Development")
+    builder.Services.AddSingleton<IEmailSender, LoggingEmailSender>();
+else
+    builder.Services.AddHttpClient<IEmailSender, ResendEmailSender>(client => client.BaseAddress = new Uri("https://api.resend.com/"));
 builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
 builder.Services.AddScoped<ICategoryService, CategoryService>();
 builder.Services.AddProblemDetails(o => o.CustomizeProblemDetails = context =>
