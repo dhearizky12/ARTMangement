@@ -7,7 +7,7 @@ import { useResource } from "../hooks/useResource";
 import { adminApi, type Agency, type ProviderAdmin } from "../api/marketplaceApi";
 import { useAuth } from "../context/AuthContext";
 
-function VerificationQueueItem({ item, reload }: { item: ProviderAdmin; reload: () => Promise<void> }) {
+function VerificationQueueItem({ item, reload }: { item: ProviderAdmin; reload: () => Promise<unknown> }) {
   const p = item.provider;
   const [checks, setChecks] = useState({
     identityVerified: p.identityVerified,
@@ -65,7 +65,7 @@ function VerificationQueueItem({ item, reload }: { item: ProviderAdmin; reload: 
   );
 }
 
-function ProviderRosterItem({ item, reload }: { item: ProviderAdmin; reload: () => Promise<void> }) {
+function ProviderRosterItem({ item, reload }: { item: ProviderAdmin; reload: () => Promise<unknown> }) {
   const p = item.provider;
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);

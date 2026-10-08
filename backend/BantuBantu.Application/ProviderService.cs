@@ -6,6 +6,17 @@ public class ProviderService(IMarketplaceRepository repo, ICurrentActor current,
     private async Task<Provider> Owned(Guid id, CancellationToken ct) => await repo.AdminProviderAsync(Admin(), id, ct) ?? throw new ProfileException("Penyedia tidak ditemukan.", 404);
     private async Task<Provider> Own(CancellationToken ct) { var actor = Provider(); return await repo.AdminProviderAsync(actor, actor.ProviderId!.Value, ct) ?? throw new ProfileException("Penyedia tidak ditemukan.", 404); }
     private static string Step(Provider p) => p.FullName.Length < 2 ? "personal" : p.VillageId is null ? "address" : !new[] { "KTP", "KK" }.All(t => p.Documents.Any(d => d.DocumentType == t)) ? "documents" : p.Categories.Count == 0 || p.Skills.Count == 0 || p.Languages.Count == 0 || p.Price <= 0 || p.Availability.Count != 7 ? "profile" : "verify";
+    private const string Empty = "belum";
+    private const string Partial = "sebagian";
+    private const string Complete = "lengkapi";
+    private static string Status(bool complete, bool started) => complete ? Complete : started ? Partial : Empty;
+    private static ApplicationSectionDto[] Sections(Provider p) => new ApplicationSectionDto[]
+    {
+        new("personal", "Personal", Status(p.FullName.Length >= 2 && p.Age >= 18 && p.Bio.Length >= 10, p.FullName.Length >= 2 || p.Age >= 18 || p.Bio.Length >= 10)),
+        new("address", "Alamat", Status(p.VillageId is not null && p.AddressDetail.Length >= 10 && p.PostalCode.Length == 5, p.VillageId is not null || p.AddressDetail.Length >= 10 || p.PostalCode.Length == 5)),
+        new("documents", "Dokumen", Status(new[] { "KTP", "KK" }.All(t => p.Documents.Any(d => d.DocumentType == t)), p.Documents.Any())),
+        new("profile", "Layanan", Status(p.Categories.Count > 0 && p.Skills.Count > 0 && p.Languages.Count > 0 && p.Price > 0 && p.Availability.Count == 7 && p.Availability.Any(a => a.IsAvailable), p.Categories.Count > 0 || p.Skills.Count > 0 || p.Languages.Count > 0 || p.Price > 0 || p.Availability.Count == 7)),
+    };
     private static bool CanEdit(Provider p) => p.ApplicationStatus is ProviderApplicationStatus.Draft or ProviderApplicationStatus.NeedsChanges;
     private static void Invalidate(Provider p) { p.VerificationStatus = VerificationStatus.Pending; p.IdentityVerified = p.BackgroundCheckPassed = p.ContractSigned = false; }
     private static ProviderDto Map(Provider p)
@@ -41,7 +52,7 @@ public class ProviderService(IMarketplaceRepository repo, ICurrentActor current,
     public async Task<ProviderApplicationDto> OwnApplication(CancellationToken ct)
     {
         var p = await Own(ct);
-        return new(AdminMap(p), p.ApplicationStatus, Step(p), p.ModerationNote, p.SubmittedAt, CanEdit(p));
+        return new(AdminMap(p), p.ApplicationStatus, Step(p), p.ModerationNote, p.SubmittedAt, CanEdit(p), Sections(p));
     }
     public async Task<ProviderApplicationDto> SubmitApplication(CancellationToken ct)
     {

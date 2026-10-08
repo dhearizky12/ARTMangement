@@ -45,8 +45,9 @@ export function DashboardPage() {
             placeholder="Apa yang Anda butuhkan?"
             maxLength={100}
           />
-          <Button type="submit" aria-label="Cari">
+          <Button type="submit">
             <Search />
+            Cari
           </Button>
         </form>
         <Link className="text-link" to="/search">

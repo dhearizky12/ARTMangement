@@ -35,6 +35,7 @@ export function SearchPage() {
       >
         <Input
           label="Nama atau keahlian"
+          placeholder="Mis. taman, driver, atau nama penyedia"
           value={text}
           maxLength={100}
           onChange={(e) => setText(e.target.value)}

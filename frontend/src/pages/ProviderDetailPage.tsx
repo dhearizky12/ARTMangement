@@ -12,6 +12,7 @@ import {
   money,
   priceUnit,
   dayNames,
+  days,
 } from "../api/marketplaceApi";
 import type { VillageResult } from "../api/wilayahApi";
 export function ProviderDetailPage() {
@@ -121,7 +122,10 @@ export function ProviderDetailPage() {
             </div>
             <h2>Ketersediaan mingguan</h2>
             <div className="availability">
-              {p.availability.map((d) => (
+              {days
+                .map((day) => p.availability.find((d) => d.dayOfWeek === day))
+                .filter((d): d is NonNullable<typeof d> => Boolean(d))
+                .map((d) => (
                 <div
                   key={d.dayOfWeek}
                   className={d.isAvailable ? "available" : ""}

@@ -9,13 +9,13 @@ export type ProviderApplicationStatus =
   | "Rejected"
   | "Suspended";
 export const days = [
-  "Sunday",
   "Monday",
   "Tuesday",
   "Wednesday",
   "Thursday",
   "Friday",
   "Saturday",
+  "Sunday",
 ] as const;
 export const dayNames: Record<string, string> = {
   Sunday: "Minggu",
@@ -120,6 +120,11 @@ export interface ProviderPage {
   pageSize: number;
   items: Provider[];
 }
+export interface ApplicationSection {
+  id: "personal" | "address" | "documents" | "profile";
+  label: string;
+  status: "belum" | "sebagian" | "lengkapi";
+}
 export interface ProviderApplication {
   provider: ProviderAdmin;
   status: ProviderApplicationStatus;
@@ -127,6 +132,7 @@ export interface ProviderApplication {
   note: string | null;
   submittedAt: string | null;
   canEdit: boolean;
+  sections: ApplicationSection[];
 }
 export const money = (price: number) =>
   new Intl.NumberFormat("id-ID", {

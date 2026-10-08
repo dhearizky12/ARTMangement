@@ -111,12 +111,14 @@ export function OrdersPage() {
         <Card>
           <h2>Semua pesanan, di satu tempat</h2>
           <p>Masuk sebagai Customer untuk melihat riwayat pesanan Anda.</p>
-          <Link className="btn btn-primary" to="/login?returnTo=%2Forders">
-            Masuk
-          </Link>
-          <Link className="text-link" to="/search">
-            Jelajahi layanan
-          </Link>
+          <div className="action-stack">
+            <Link className="btn btn-primary" to="/login?returnTo=%2Forders">
+              Masuk
+            </Link>
+            <Link className="text-link" to="/search">
+              Jelajahi layanan
+            </Link>
+          </div>
         </Card>
       )}
     </AppShell>

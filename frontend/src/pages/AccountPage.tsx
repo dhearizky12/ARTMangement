@@ -3,6 +3,7 @@ import { useAuth } from "../context/AuthContext";
 import { authApi } from "../api/authApi";
 import { AppShell } from "../components/AppShell";
 import { Card, Button } from "../components/ui";
+import { GoogleLogo } from "../components/GoogleLogo";
 import { useState } from "react";
 export function AccountPage() {
   const { session } = useAuth();
@@ -37,18 +38,24 @@ export function AccountPage() {
                 className="btn btn-primary wide"
                 to="/login?returnTo=%2Faccount"
               >
+                <span className="google-tile">
+                  <GoogleLogo />
+                </span>
                 Masuk dengan Google
               </Link>
-              <Link className="text-link" to="/admin/login">
-                Login admin
-              </Link>
-              <Link className="text-link" to="/provider/login">
+              <div className="provider-divider">
+                <span>Untuk penyedia jasa</span>
+              </div>
+              <Link className="btn btn-ghost wide" to="/provider/login">
                 Login penyedia jasa
               </Link>
-              <Link className="text-link" to="/provider/register">
+              <Link className="btn btn-ghost wide" to="/provider/register">
                 Daftar sebagai penyedia jasa
               </Link>
             </div>
+            <p className="admin-link">
+              <Link to="/admin/login">Login admin</Link>
+            </p>
           </>
         )}
       </Card>

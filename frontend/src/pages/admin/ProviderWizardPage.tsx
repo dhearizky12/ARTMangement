@@ -24,7 +24,7 @@ function Editor({
   reload,
 }: {
   data: ProviderAdmin;
-  reload: () => Promise<void>;
+  reload: () => Promise<unknown>;
 }) {
   const [step, setStep] = useState(data.step);
   const [busy, setBusy] = useState(false);
