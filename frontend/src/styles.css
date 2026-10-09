@@ -1501,3 +1501,93 @@ input[type="number"]::-webkit-inner-spin-button {
   font-size: var(--text-caption);
   color: var(--color-muted);
 }
+
+.skeleton {
+  display: block;
+  min-height: 0.75rem;
+  border-radius: var(--radius);
+  background: linear-gradient(
+    90deg,
+    var(--color-bg) 25%,
+    var(--color-primary-soft) 37%,
+    var(--color-bg) 63%
+  );
+  background-size: 400% 100%;
+  animation: skeleton-shimmer 1.4s ease infinite;
+}
+.skeleton-circle {
+  border-radius: 50%;
+}
+@keyframes skeleton-shimmer {
+  from {
+    background-position: 100% 50%;
+  }
+  to {
+    background-position: 0 50%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
+.provider-heading .skeleton-circle {
+  flex-shrink: 0;
+}
+.provider-heading-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(30, 43, 36, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+}
+.modal {
+  width: 100%;
+  max-width: 24rem;
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-ink);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: var(--space-5);
+}
+.modal h2 {
+  font-size: var(--text-title);
+  margin-bottom: var(--space-3);
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+  flex-wrap: wrap;
+}
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--touch);
+  min-height: var(--touch);
+  padding: 0;
+}
+.load-more-status,
+.load-more-error {
+  text-align: center;
+  margin: var(--space-4) 0;
+}
+.load-more-error p {
+  color: var(--color-danger);
+}
+.load-more-error .btn {
+  margin-top: var(--space-2);
+}
+.load-more-sentinel {
+  height: 1px;
+}

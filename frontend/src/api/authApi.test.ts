@@ -12,8 +12,12 @@ describe("AuthApi", () => {
   it("shares one refresh request across concurrent consumers", async () => {
     const fetch = vi
       .fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify(session), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify(session), { status: 200 }));
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(session), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(session), { status: 200 }),
+      );
     vi.stubGlobal("fetch", fetch);
     const api = new AuthApi("https://api.example.test");
     await api.admin("admin@example.test", "password");
@@ -45,7 +49,8 @@ describe("AuthApi", () => {
   it("clears the in-memory session after refresh rejection", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn()
+      vi
+        .fn()
         .mockResolvedValueOnce(new Response(JSON.stringify(session)))
         .mockResolvedValueOnce(new Response("{}", { status: 401 })),
     );
@@ -89,5 +94,91 @@ describe("AuthApi", () => {
       "https://api.example.test/api/providers",
     );
     expect(fetch.mock.calls[0][1].headers).not.toHaveProperty("Authorization");
+  });
+});
+function memoryStorage(): Storage {
+  const store = new Map<string, string>();
+  return {
+    getItem: (key) => (store.has(key) ? store.get(key)! : null),
+    setItem: (key, value) => void store.set(key, String(value)),
+    removeItem: (key) => void store.delete(key),
+    clear: () => store.clear(),
+    key: (index) => [...store.keys()][index] ?? null,
+    get length() {
+      return store.size;
+    },
+  };
+}
+const SESSION_KEY = "bantubantu.session";
+describe("AuthApi session persistence", () => {
+  it("persists a login and restores the session in a fresh instance", async () => {
+    const storage = memoryStorage();
+    vi.stubGlobal("window", { localStorage: storage });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify(session))),
+    );
+    const first = new AuthApi("https://api.example.test");
+    await first.admin("admin@example.test", "password");
+    expect(storage.getItem(SESSION_KEY)).toContain("refresh-token");
+    const second = new AuthApi("https://api.example.test");
+    expect(second.currentSession?.refreshToken).toBe("refresh-token");
+    expect(second.currentSession?.user.role).toBe("Customer");
+  });
+  it("drops a stored session whose refresh token has expired", () => {
+    const storage = memoryStorage();
+    storage.setItem(
+      SESSION_KEY,
+      JSON.stringify({
+        ...session,
+        refreshExpiresAt: new Date(Date.now() - 1000).toISOString(),
+      }),
+    );
+    vi.stubGlobal("window", { localStorage: storage });
+    const api = new AuthApi("https://api.example.test");
+    expect(api.currentSession).toBeNull();
+    expect(storage.getItem(SESSION_KEY)).toBeNull();
+  });
+  it("ignores malformed stored data", () => {
+    const storage = memoryStorage();
+    storage.setItem(SESSION_KEY, "not-json{");
+    vi.stubGlobal("window", { localStorage: storage });
+    const api = new AuthApi("https://api.example.test");
+    expect(api.currentSession).toBeNull();
+    expect(storage.getItem(SESSION_KEY)).toBeNull();
+  });
+  it("clears the stored session when refresh is rejected", async () => {
+    const storage = memoryStorage();
+    vi.stubGlobal("window", { localStorage: storage });
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(JSON.stringify(session)))
+        .mockResolvedValueOnce(new Response("{}", { status: 401 })),
+    );
+    const api = new AuthApi("https://api.example.test");
+    await api.admin("admin@example.test", "password");
+    expect(storage.getItem(SESSION_KEY)).not.toBeNull();
+    await expect(api.refresh()).rejects.toMatchObject({ status: 401 });
+    expect(storage.getItem(SESSION_KEY)).toBeNull();
+  });
+  it("clears the stored session on logout", async () => {
+    const storage = memoryStorage();
+    vi.stubGlobal("window", { localStorage: storage });
+    vi.stubGlobal("sessionStorage", memoryStorage());
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(JSON.stringify(session)))
+        .mockResolvedValueOnce(new Response(null, { status: 204 })),
+    );
+    const api = new AuthApi("https://api.example.test");
+    await api.admin("admin@example.test", "password");
+    expect(storage.getItem(SESSION_KEY)).not.toBeNull();
+    await api.logout();
+    expect(storage.getItem(SESSION_KEY)).toBeNull();
+    expect(api.currentSession).toBeNull();
   });
 });

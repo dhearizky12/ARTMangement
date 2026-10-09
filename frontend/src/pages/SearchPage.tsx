@@ -1,26 +1,45 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { AppShell } from "../components/AppShell";
 import { Input, Button, Card } from "../components/ui";
 import { AddressCombobox } from "../components/AddressCombobox";
 import { ProviderCard } from "../components/ProviderCard";
+import { ProviderGridSkeleton } from "../components/skeletons";
 import { ResourceState } from "../components/ResourceState";
-import { useResource } from "../hooks/useResource";
 import { useCategories } from "../hooks/useCategories";
-import { marketplaceApi } from "../api/marketplaceApi";
+import { useInfiniteProviders } from "../hooks/useInfiniteProviders";
 export function SearchPage() {
   const [params, setParams] = useSearchParams();
   const [text, setText] = useState(params.get("q") || "");
   const categories = useCategories();
-  const result = useResource(
-    () => marketplaceApi.providers(params),
-    params.toString(),
-  );
+  const {
+    items,
+    total,
+    hasMore,
+    loading,
+    loadingMore,
+    error,
+    moreError,
+    loadMore,
+    retry,
+  } = useInfiniteProviders(params);
+  const sentinel = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const node = sentinel.current;
+    if (!node || !hasMore || moreError) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) loadMore();
+      },
+      { rootMargin: "400px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasMore, moreError, loadMore]);
   function update(key: string, value: string) {
     const next = new URLSearchParams(params);
     if (value) next.set(key, value);
     else next.delete(key);
-    if (key !== "page") next.delete("page");
     setParams(next);
   }
   return (
@@ -68,40 +87,44 @@ export function SearchPage() {
           </Button>
         ))}
       </div>
-      <ResourceState {...result} />
-      {result.data && !result.loading && (
+      <ResourceState
+        loading={loading}
+        error={error}
+        reload={retry}
+        skeleton={<ProviderGridSkeleton />}
+      />
+      {!loading && !error && (
         <>
-          <p>{result.data.total} penyedia ditemukan</p>
+          <p>{total} penyedia ditemukan</p>
           <div className="provider-grid">
-            {result.data.items.map((p) => (
+            {items.map((p) => (
               <ProviderCard key={p.id} provider={p} />
             ))}
           </div>
-          {!result.data.total && (
+          {!total && (
             <Card>
               <h2>Belum ada yang sesuai</h2>
               <p>Coba nama, keahlian, kategori, atau wilayah lain.</p>
             </Card>
           )}
-          <div className="pagination">
-            <Button
-              variant="ghost"
-              disabled={result.data.page <= 1}
-              onClick={() => update("page", String(result.data!.page - 1))}
-            >
-              Sebelumnya
-            </Button>
-            <span>Halaman {result.data.page}</span>
-            <Button
-              variant="ghost"
-              disabled={
-                result.data.page * result.data.pageSize >= result.data.total
-              }
-              onClick={() => update("page", String(result.data!.page + 1))}
-            >
-              Berikutnya
-            </Button>
-          </div>
+          {loadingMore && (
+            <p role="status" className="load-more-status">
+              Memuat layanan lainnya…
+            </p>
+          )}
+          {moreError && (
+            <div role="alert" className="load-more-error">
+              <p>{moreError}</p>
+              <Button onClick={loadMore}>Coba lagi</Button>
+            </div>
+          )}
+          {hasMore && !moreError && (
+            <div
+              ref={sentinel}
+              className="load-more-sentinel"
+              aria-hidden="true"
+            />
+          )}
         </>
       )}
     </AppShell>

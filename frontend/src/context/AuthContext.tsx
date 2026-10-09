@@ -12,7 +12,9 @@ const AuthContext = createContext<{
   error: string;
 }>({ session: null, loading: true, error: "" });
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
+  const [session, setSession] = useState<Session | null>(
+    () => authApi.currentSession,
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   useEffect(() => {
