@@ -11,13 +11,21 @@ jobs:
     backend:
         name: Deploy backend to MonsterASP.NET
         runs-on: ubuntu-latest
+        timeout-minutes: 30
+        # One backend deploy at a time: two quick pushes to main must not race
+        # on the same /wwwroot. The second run waits, then deploys in turn.
+        concurrency:
+            group: deploy-backend
+            cancel-in-progress: false
         env:
             DATABASE_URL: ${{ secrets.DATABASE_URL }}
             DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
             GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
             JWT_AUDIENCE: ${{ secrets.JWT_AUDIENCE }}
-            JWT_ACCESS_MINUTES: ${{ secrets.JWT_ACCESS_MINUTES }}
-            JWT_REFRESH_DAYS: ${{ secrets.JWT_REFRESH_DAYS }}
+            # Not secrets (plain numeric TTLs); reading them via vars stops
+            # GitHub from masking "15"/"7" across every log line.
+            JWT_ACCESS_MINUTES: ${{ vars.JWT_ACCESS_MINUTES }}
+            JWT_REFRESH_DAYS: ${{ vars.JWT_REFRESH_DAYS }}
             FRONTEND_ORIGIN: ${{ secrets.FRONTEND_ORIGIN }}
             MONSTERASP_FTP_PASSWORD: ${{ secrets.MONSTERASP_FTP_PASSWORD }}
             # Resend (sending key stays out of job env; see the restore step below)

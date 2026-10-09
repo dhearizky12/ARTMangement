@@ -2,6 +2,42 @@
 
 set -euo pipefail
 
+#
+# Deploy helpers (retry classification, lftp retry runner, offline wait,
+# fail-safe messaging). Sourced first so all sections below can use them.
+#
+RETRY_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/deploy-be.lib.sh"
+[[ -f "$RETRY_LIB" ]] || {
+    echo "ERROR: deploy-be.lib.sh tidak ditemukan di samping deploy-be.sh." >&2
+    exit 1
+}
+# shellcheck source=deploy-be.lib.sh
+source "$RETRY_LIB"
+
+# ============================================================
+# Deployment state & fail-safe exit trap
+# ============================================================
+#
+# OFFLINE_UPLOADED tracks whether app_offline.htm made it to the server.
+# If it did and the script then dies, on_exit leaves the marker in place
+# (maintenance page, NOT a half-deleted app) and points the operator at
+# the safe recovery path. CLEAN_DIR is a local temp dir removed on exit.
+#
+OFFLINE_UPLOADED=0
+CLEAN_DIR=
+
+on_exit() {
+    local rc=$?
+    if [[ -n "$CLEAN_DIR" ]] && [[ -d "$CLEAN_DIR" ]]; then
+        rm -rf "$CLEAN_DIR"
+    fi
+    if (( rc != 0 )) && (( OFFLINE_UPLOADED == 1 )); then
+        print_fail_safe >&2
+    fi
+    exit "$rc"
+}
+trap on_exit EXIT
+
 # ============================================================
 # BantuBantu Backend -> MonsterASP.NET
 #
@@ -19,9 +55,11 @@ set -euo pipefail
 #   ↓
 # app_offline.htm
 #   ↓
-# clean /wwwroot
+# wait until ANCM serves it (HTTP 503)
 #   ↓
-# upload fresh publish
+# clean /wwwroot (with retries on locked files)
+#   ↓
+# upload fresh publish (with retries)
 #   ↓
 # remove app_offline.htm
 #   ↓
@@ -1053,17 +1091,8 @@ PY
 log "Preparing app_offline.htm..."
 
 
+# CLEAN_DIR is removed by on_exit (EXIT trap wired up at the top).
 CLEAN_DIR="$(mktemp -d)"
-
-
-cleanup_local() {
-
-    rm -rf "$CLEAN_DIR"
-
-}
-
-
-trap cleanup_local EXIT
 
 
 cat > "$CLEAN_DIR/app_offline.htm" <<'EOF'
@@ -1101,31 +1130,38 @@ EOF
 log "Putting remote application offline..."
 
 
-lftp -p "$FTP_PORT" <<EOF
+LFTP_OFFLINE_CMD="$(cat <<EOF
 set cmd:fail-exit yes
 set sftp:auto-confirm yes
 set mirror:set-permissions no
+set net:max-retries 5
+set net:timeout 30
+set net:reconnect-interval-base 5
 
 open -u "$FTP_USER","$FTP_PASSWORD" sftp://$FTP_HOST
 
-put "$CLEAN_DIR/app_offline.htm" \
-    -o "$REMOTE_DIR/app_offline.htm"
+put "$CLEAN_DIR/app_offline.htm" -o "$REMOTE_DIR/app_offline.htm"
 
 bye
 EOF
+)"
 
+run_lftp_retry "upload app_offline.htm" "$LFTP_OFFLINE_CMD"
 
-echo "Waiting for IIS to release application files..."
+OFFLINE_UPLOADED=1
 
-sleep 3
+log "Waiting for IIS/ANCM to serve app_offline.htm..."
 
+# A 503 proves ANCM acknowledged the marker; it does NOT guarantee the old
+# process has released its DLL locks yet — the clean/upload retries below
+# exist for exactly that reason.
+wait_for_site_offline
 
 # ============================================================
 # 18. Clean remote /wwwroot
 # ============================================================
 
 log "Cleaning $REMOTE_DIR completely..."
-
 
 #
 # CLEAN_DIR contains ONLY app_offline.htm.
@@ -1138,27 +1174,27 @@ log "Cleaning $REMOTE_DIR completely..."
 # Everything from the old deployment is removed except App_Data/logs, which
 # is retained so the rolling diagnostics remain available after redeploys.
 #
+# NOTE (data safety): App_Data/documents is NOT excluded — provider-uploaded
+# documents stored there ARE deleted on every deploy (see STAGING_STORAGE_ROOT).
+#
 
-lftp -p "$FTP_PORT" <<EOF
+LFTP_CLEAN_CMD="$(cat <<EOF
 set cmd:fail-exit yes
 set sftp:auto-confirm yes
 set mirror:set-permissions no
+set net:max-retries 5
+set net:timeout 30
+set net:reconnect-interval-base 5
 
 open -u "$FTP_USER","$FTP_PASSWORD" sftp://$FTP_HOST
 
-mirror \
-    -R \
-    --delete \
-    --delete-first \
-    --exclude-glob=App_Data/logs/** \
-    --no-perms \
-    --verbose \
-    "$CLEAN_DIR" \
-    "$REMOTE_DIR"
+mirror -R --delete --delete-first --exclude-glob=App_Data/logs/** --no-perms --verbose "$CLEAN_DIR" "$REMOTE_DIR"
 
 bye
 EOF
+)"
 
+run_lftp_retry "clean $REMOTE_DIR" "$LFTP_CLEAN_CMD"
 
 echo "Remote $REMOTE_DIR cleaned."
 
@@ -1170,25 +1206,23 @@ echo "Remote $REMOTE_DIR cleaned."
 log "Uploading fresh backend publish..."
 
 
-lftp -p "$FTP_PORT" <<EOF
+LFTP_UPLOAD_CMD="$(cat <<EOF
 set cmd:fail-exit yes
 set sftp:auto-confirm yes
 set mirror:set-permissions no
+set net:max-retries 5
+set net:timeout 30
+set net:reconnect-interval-base 5
 
 open -u "$FTP_USER","$FTP_PASSWORD" sftp://$FTP_HOST
 
-mirror \
-    -R \
-    --no-perms \
-    --transfer-all \
-    --parallel=4 \
-    --verbose \
-    "$PUBLISH_DIR" \
-    "$REMOTE_DIR"
+mirror -R --no-perms --transfer-all --parallel=4 --verbose "$PUBLISH_DIR" "$REMOTE_DIR"
 
 bye
 EOF
+)"
 
+run_lftp_retry "upload fresh publish" "$LFTP_UPLOAD_CMD"
 
 echo "Fresh publish uploaded."
 
@@ -1200,9 +1234,12 @@ echo "Fresh publish uploaded."
 log "Bringing application online..."
 
 
-lftp -p "$FTP_PORT" <<EOF
+LFTP_ONLINE_CMD="$(cat <<EOF
 set cmd:fail-exit yes
 set sftp:auto-confirm yes
+set net:max-retries 5
+set net:timeout 30
+set net:reconnect-interval-base 5
 
 open -u "$FTP_USER","$FTP_PASSWORD" sftp://$FTP_HOST
 
@@ -1210,6 +1247,9 @@ rm "$REMOTE_DIR/app_offline.htm"
 
 bye
 EOF
+)"
+
+run_lftp_retry "remove app_offline.htm" "$LFTP_ONLINE_CMD"
 
 
 # ============================================================
