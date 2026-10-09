@@ -24,6 +24,28 @@ export interface Session {
   refreshExpiresAt: string;
 }
 import { clearAllOnboardingDrafts } from "../lib/draftStorage";
+const SESSION_STORAGE_KEY = "bantubantu.session";
+function loadStoredSession(): Session | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(SESSION_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Session;
+    if (!parsed?.refreshToken || !parsed.refreshExpiresAt) return null;
+    if (Date.parse(parsed.refreshExpiresAt) <= Date.now()) {
+      window.localStorage.removeItem(SESSION_STORAGE_KEY);
+      return null;
+    }
+    return parsed;
+  } catch {
+    try {
+      window.localStorage.removeItem(SESSION_STORAGE_KEY);
+    } catch {
+      /* ignore unreadable storage */
+    }
+    return null;
+  }
+}
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -37,11 +59,30 @@ export class AuthApi {
   private session: Session | null = null;
   private refreshPending: Promise<Session> | null = null;
   onSession: (session: Session | null) => void = () => {};
-  constructor(private baseUrl: string) {}
+  constructor(private baseUrl: string) {
+    this.session = loadStoredSession();
+  }
+  get currentSession(): Session | null {
+    return this.session;
+  }
   private setSession(session: Session | null) {
     this.session = session;
+    this.storeSession(session);
     this.onSession(session);
     return session;
+  }
+  private storeSession(session: Session | null) {
+    if (typeof window === "undefined") return;
+    try {
+      if (session)
+        window.localStorage.setItem(
+          SESSION_STORAGE_KEY,
+          JSON.stringify(session),
+        );
+      else window.localStorage.removeItem(SESSION_STORAGE_KEY);
+    } catch {
+      /* storage unavailable or full: keep the in-memory session only */
+    }
   }
   private async request<T>(
     path: string,

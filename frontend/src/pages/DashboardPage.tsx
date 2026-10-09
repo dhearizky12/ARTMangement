@@ -4,6 +4,10 @@ import { AppShell } from "../components/AppShell";
 import { Card, Input, Button } from "../components/ui";
 import { ProviderCard } from "../components/ProviderCard";
 import { ResourceState } from "../components/ResourceState";
+import {
+  CategoryGridSkeleton,
+  ProviderGridSkeleton,
+} from "../components/skeletons";
 import { CategoryIcon } from "../components/CategoryIcon";
 import { useCategories } from "../hooks/useCategories";
 import { useResource } from "../hooks/useResource";
@@ -61,7 +65,11 @@ export function DashboardPage() {
       </Link>
       <section className="market-section">
         <h2>Bantuan yang Anda cari</h2>
-        <ResourceState {...categories} reload={categories.retry} />
+        <ResourceState
+          {...categories}
+          reload={categories.retry}
+          skeleton={<CategoryGridSkeleton />}
+        />
         <div className="category-grid">
           {categories.categories.map((c) => (
             <Link
@@ -83,7 +91,10 @@ export function DashboardPage() {
         <p className="muted">
           Diurutkan berdasarkan ulasan dari pesanan yang telah selesai.
         </p>
-        <ResourceState {...providers} />
+        <ResourceState
+          {...providers}
+          skeleton={<ProviderGridSkeleton count={4} />}
+        />
         <div className="provider-grid">
           {providers.data?.items.map((p) => (
             <ProviderCard key={p.id} provider={p} />

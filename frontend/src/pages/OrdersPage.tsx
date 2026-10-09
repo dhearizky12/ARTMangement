@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { AppShell } from "../components/AppShell";
 import { Card, Button, Select, Textarea } from "../components/ui";
 import { ResourceState } from "../components/ResourceState";
+import { OrderListSkeleton } from "../components/skeletons";
 import { useResource } from "../hooks/useResource";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -21,7 +22,7 @@ function CustomerOrders() {
   const result = useResource(marketplaceApi.orders, "orders");
   return (
     <>
-      <ResourceState {...result} />
+      <ResourceState {...result} skeleton={<OrderListSkeleton />} />
       {result.data?.length === 0 && (
         <Card>
           <h2>Belum ada pesanan</h2>

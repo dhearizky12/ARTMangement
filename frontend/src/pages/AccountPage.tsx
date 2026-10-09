@@ -17,18 +17,27 @@ export function AccountPage() {
             <h2>{session.user.fullName}</h2>
             <p>{session.user.email}</p>
             <p>{session.user.role}</p>
-            {session.user.role === "Provider" ? (
-              <Link className="text-link" to="/provider/dashboard">Buka panel Provider</Link>
-            ) : session.user.role !== "Customer" ? (
-              <Link className="text-link" to="/admin">Buka ruang kelola</Link>
-            ) : null}
-            <Button
-              variant="secondary"
-              onClick={() => authApi.logout().catch((e) => setError(e.message))}
-            >
-              Keluar
-            </Button>
-            {error && <p role="alert">{error}</p>}
+            <div className="account-login-actions">
+              <Button
+                variant="secondary"
+                className="btn btn-secondary wide"
+                onClick={() =>
+                  authApi.logout().catch((e) => setError(e.message))
+                }
+              >
+                Keluar
+              </Button>
+              {session.user.role === "Provider" ? (
+                <Link className="text-link" to="/provider/dashboard">
+                  Buka panel Provider
+                </Link>
+              ) : session.user.role !== "Customer" ? (
+                <Link className="text-link" to="/admin">
+                  Buka ruang kelola
+                </Link>
+              ) : null}
+              {error && <p role="alert">{error}</p>}
+            </div>
           </>
         ) : (
           <>

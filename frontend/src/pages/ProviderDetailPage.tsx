@@ -5,6 +5,7 @@ import { AppShell } from "../components/AppShell";
 import { Card, Badge, Button, Input, Textarea } from "../components/ui";
 import { AddressCombobox } from "../components/AddressCombobox";
 import { ResourceState } from "../components/ResourceState";
+import { ProviderDetailSkeleton } from "../components/skeletons";
 import { useResource } from "../hooks/useResource";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -53,7 +54,7 @@ export function ProviderDetailPage() {
       <Link className="text-link" to="/search">
         ← Kembali ke pencarian
       </Link>
-      <ResourceState {...result} />
+      <ResourceState {...result} skeleton={<ProviderDetailSkeleton />} />
       {p && (
         <>
           <section className="provider-detail-hero">
@@ -126,14 +127,14 @@ export function ProviderDetailPage() {
                 .map((day) => p.availability.find((d) => d.dayOfWeek === day))
                 .filter((d): d is NonNullable<typeof d> => Boolean(d))
                 .map((d) => (
-                <div
-                  key={d.dayOfWeek}
-                  className={d.isAvailable ? "available" : ""}
-                >
-                  <strong>{dayNames[d.dayOfWeek]}</strong>
-                  <span>{d.isAvailable ? "Tersedia" : "Libur"}</span>
-                </div>
-              ))}
+                  <div
+                    key={d.dayOfWeek}
+                    className={d.isAvailable ? "available" : ""}
+                  >
+                    <strong>{dayNames[d.dayOfWeek]}</strong>
+                    <span>{d.isAvailable ? "Tersedia" : "Libur"}</span>
+                  </div>
+                ))}
             </div>
           </section>
           <section className="market-section">
@@ -210,7 +211,7 @@ export function ProviderDetailPage() {
                     () =>
                       document
                         .getElementById("booking")
-                        ?.scrollIntoView({ behavior: "smooth" }),
+                        ?.scrollIntoView({ block: "nearest" }),
                     0,
                   );
                 }}

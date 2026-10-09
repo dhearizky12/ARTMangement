@@ -58,16 +58,30 @@ test.describe("live marketplace", () => {
       await page.getByRole("link", { name: "Masuk & Pesan" }).click();
       await expect(page).toHaveURL(/login\?returnTo=/);
       // Restore a real refresh session belonging to a fixture Customer in the isolated PostgreSQL database.
-      await context.addCookies([
-        {
-          name: "bantubantu_refresh",
-          value: fixtures.customers[String(width)],
-          domain: "localhost",
-          path: "/api/auth",
-          httpOnly: true,
-          sameSite: "Lax",
-        },
-      ]);
+      // The app persists sessions in localStorage; expiresAt is in the past so the
+      // first authorized request refreshes with the fixture token.
+      await context.addInitScript(
+        ([key, token]) =>
+          localStorage.setItem(
+            key,
+            JSON.stringify({
+              accessToken: "e2e-bootstrap",
+              expiresAt: new Date(0).toISOString(),
+              refreshToken: token,
+              refreshExpiresAt: new Date(Date.now() + 86400000).toISOString(),
+              user: {
+                id: "00000000-0000-0000-0000-000000000000",
+                email: "e2e@example.test",
+                fullName: "E2E Customer",
+                pictureUrl: null,
+                role: "Customer",
+                profileCompleted: true,
+                profileStep: "done",
+              },
+            }),
+          ),
+        ["bantubantu.session", fixtures.customers[String(width)]],
+      );
       await page.reload();
       await expect(page).toHaveURL(
         new RegExp(`/providers/${fixtures.providerId}$`),
