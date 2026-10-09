@@ -1,5 +1,5 @@
 import { ShieldCheck, ArrowUpRight } from "lucide-react";
-import { Badge } from "../components/ui";
+import { Badge, Spinner } from "../components/ui";
 import { useState } from "react";
 import { GoogleLogin } from "@react-oauth/google";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
@@ -39,9 +39,13 @@ export function LoginPage() {
             {!import.meta.env.VITE_GOOGLE_CLIENT_ID ? (
               <p>Login Google belum dikonfigurasi.</p>
             ) : loading ? (
-              <p>Memeriksa sesi…</p>
+              <p>
+                <Spinner /> Memeriksa sesi…
+              </p>
             ) : busy ? (
-              <p>Menyiapkan akun Anda…</p>
+              <p>
+                <Spinner /> Menyiapkan akun Anda…
+              </p>
             ) : (
               <GoogleLogin
                 onSuccess={async ({ credential }) => {

@@ -2,6 +2,7 @@ import {
   useEffect,
   useId,
   useRef,
+  useState,
   type ButtonHTMLAttributes,
   type HTMLAttributes,
   type InputHTMLAttributes,
@@ -9,6 +10,7 @@ import {
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from "react";
+import { Eye, EyeOff } from "lucide-react";
 export function Button({
   variant = "primary",
   className = "",
@@ -77,6 +79,60 @@ export function Input({
         </small>
       )}
     </div>
+  );
+}
+export function PasswordInput({
+  label,
+  hint,
+  error,
+  id,
+  type: _type,
+  ...props
+}: InputHTMLAttributes<HTMLInputElement> & FieldProps) {
+  const [visible, setVisible] = useState(false);
+  const generated = useId();
+  const fieldId = id || generated;
+  return (
+    <div className="field">
+      <label htmlFor={fieldId}>{label}</label>
+      <div className="password-wrap">
+        <input
+          className="input"
+          id={fieldId}
+          type={visible ? "text" : "password"}
+          aria-invalid={!!error}
+          aria-describedby={hint || error ? `${fieldId}-hint` : undefined}
+          {...props}
+        />
+        <button
+          type="button"
+          className="password-toggle"
+          aria-pressed={visible}
+          aria-label={
+            visible ? "Sembunyikan kata sandi" : "Tampilkan kata sandi"
+          }
+          onClick={() => setVisible((value) => !value)}
+        >
+          {visible ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+        </button>
+      </div>
+      {(hint || error) && (
+        <small
+          id={`${fieldId}-hint`}
+          className={error ? "field-error" : "muted"}
+        >
+          {error || hint}
+        </small>
+      )}
+    </div>
+  );
+}
+export function Spinner({
+  className = "",
+  ...props
+}: HTMLAttributes<HTMLSpanElement>) {
+  return (
+    <span aria-hidden="true" className={`spinner ${className}`} {...props} />
   );
 }
 export function Select({

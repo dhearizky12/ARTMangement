@@ -4,7 +4,7 @@ import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { authApi } from "../api/authApi";
 import { useAuth } from "../context/AuthContext";
 import { AuthLayout } from "../components/AuthLayout";
-import { Badge, Button, Input } from "../components/ui";
+import { Badge, Button, Input, PasswordInput, Spinner } from "../components/ui";
 
 export function ProviderLoginPage() {
   const [params] = useSearchParams();
@@ -36,7 +36,10 @@ export function ProviderLoginPage() {
     setBusy(true);
     setError("");
     try {
-      await authApi.provider(String(data.get("email")), String(data.get("password")));
+      await authApi.provider(
+        String(data.get("email")),
+        String(data.get("password")),
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Login Provider gagal.");
     } finally {
@@ -49,7 +52,9 @@ export function ProviderLoginPage() {
       <div className="form-card">
         <Badge tone="success">AREA PROVIDER</Badge>
         <h2>Masuk ke ruang kerja Anda.</h2>
-        <p className="muted">Gunakan email dan kata sandi yang diberikan admin.</p>
+        <p className="muted">
+          Gunakan email dan kata sandi yang diberikan admin.
+        </p>
         <form onSubmit={submit}>
           <fieldset disabled={busy || loading}>
             <Input
@@ -60,25 +65,39 @@ export function ProviderLoginPage() {
               required
               maxLength={254}
             />
-            <Input
+            <PasswordInput
               label="Kata sandi"
               name="password"
-              type="password"
               autoComplete="current-password"
               required
               maxLength={256}
             />
-            {error && <p className="error" role="alert">{error}</p>}
+            {error && (
+              <p className="error" role="alert">
+                {error}
+              </p>
+            )}
             <Button type="submit" className="wide" disabled={busy || loading}>
-              {loading ? "Memeriksa sesi…" : busy ? "Memeriksa akun…" : "Masuk sebagai Provider"}
+              {(busy || loading) && <Spinner />}
+              {loading
+                ? "Memeriksa sesi…"
+                : busy
+                  ? "Memeriksa akun…"
+                  : "Masuk sebagai Provider"}
               <ArrowRight aria-hidden="true" />
             </Button>
           </fieldset>
         </form>
         <div className="login-actions">
-          <Link className="text-link" to="/provider/register">Daftar sebagai Provider</Link>
-          <Link className="text-link" to="/login">Login sebagai Customer</Link>
-          <Link className="text-link" to="/admin/login">Login admin</Link>
+          <Link className="text-link" to="/provider/register">
+            Daftar sebagai Provider
+          </Link>
+          <Link className="text-link" to="/login">
+            Login sebagai Customer
+          </Link>
+          <Link className="text-link" to="/admin/login">
+            Login admin
+          </Link>
         </div>
       </div>
     </AuthLayout>

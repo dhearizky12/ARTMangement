@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Button } from "./ui";
+import { Button, Spinner } from "./ui";
 export function ResourceState({
   loading,
   error,
@@ -12,7 +12,11 @@ export function ResourceState({
   skeleton?: ReactNode;
 }) {
   return loading ? (
-    (skeleton ?? <p role="status">Memuat…</p>)
+    (skeleton ?? (
+      <p role="status" className="loading">
+        <Spinner /> Memuat…
+      </p>
+    ))
   ) : error ? (
     <div role="alert">
       <p>{error}</p>

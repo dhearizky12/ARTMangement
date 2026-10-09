@@ -228,6 +228,49 @@ textarea:focus-visible {
 .input[aria-invalid="true"] {
   border-color: var(--color-danger);
 }
+.password-wrap {
+  position: relative;
+}
+.password-wrap .input {
+  padding-right: var(--space-7);
+}
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: var(--space-2);
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: var(--touch);
+  height: var(--touch);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--color-muted);
+}
+.password-toggle:focus-visible {
+  outline: var(--border-width) solid var(--color-primary);
+  outline-offset: var(--shadow-offset);
+}
+.password-toggle svg {
+  width: 20px;
+  height: 20px;
+}
+.spinner {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 textarea {
   resize: vertical;
 }

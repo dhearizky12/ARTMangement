@@ -1,6 +1,13 @@
 import { useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Badge, Button, Card, Input } from "../components/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  Input,
+  PasswordInput,
+  Spinner,
+} from "../components/ui";
 import { ResourceState } from "../components/ResourceState";
 import { ProviderLayout } from "../components/provider/ProviderLayout";
 import { useResource } from "../hooks/useResource";
@@ -36,7 +43,10 @@ const sectionStatusLabels: Record<string, string> = {
 
 export function ProviderPanelPage() {
   const profile = useResource(providerApi.profile, "provider-profile");
-  const application = useResource(providerApi.application, "provider-application");
+  const application = useResource(
+    providerApi.application,
+    "provider-application",
+  );
   const orders = useResource(providerApi.orders, "provider-orders");
   const [params] = useSearchParams();
   const tab = params.get("tab") || "ringkasan";
@@ -87,7 +97,9 @@ export function ProviderPanelPage() {
       event.currentTarget.reset();
       setPasswordMessage("Kata sandi berhasil diubah.");
     } catch (e) {
-      setPasswordError(e instanceof Error ? e.message : "Kata sandi gagal diubah.");
+      setPasswordError(
+        e instanceof Error ? e.message : "Kata sandi gagal diubah.",
+      );
     } finally {
       setPasswordBusy(false);
     }
@@ -115,15 +127,27 @@ export function ProviderPanelPage() {
           <div className="section-title">
             <h2>Profil Anda</h2>
             <div className="tags">
-              <Badge tone={p.applicationStatus === "Approved" ? "success" : "accent"}>{p.applicationStatus}</Badge>
-              <Badge tone={p.verificationStatus === "Verified" ? "success" : "accent"}>{p.verificationStatus}</Badge>
+              <Badge
+                tone={p.applicationStatus === "Approved" ? "success" : "accent"}
+              >
+                {p.applicationStatus}
+              </Badge>
+              <Badge
+                tone={
+                  p.verificationStatus === "Verified" ? "success" : "accent"
+                }
+              >
+                {p.verificationStatus}
+              </Badge>
             </div>
           </div>
           {canEdit && sections.length > 0 ? (
             <div className="profile-checklist">
               <div className="checklist-head">
                 <span>Progres aplikasi</span>
-                <strong>{doneCount}/{sections.length}</strong>
+                <strong>
+                  {doneCount}/{sections.length}
+                </strong>
               </div>
               {sections.map((s) => (
                 <Link
@@ -152,7 +176,10 @@ export function ProviderPanelPage() {
           ) : p.applicationStatus === "Submitted" ? (
             <p className="muted">Aplikasi Anda sedang ditinjau oleh admin.</p>
           ) : p.applicationStatus === "Rejected" ? (
-            <p className="error">Aplikasi ditolak. Catatan admin: {p.moderationNote || "Silakan hubungi admin."}</p>
+            <p className="error">
+              Aplikasi ditolak. Catatan admin:{" "}
+              {p.moderationNote || "Silakan hubungi admin."}
+            </p>
           ) : p.applicationStatus === "Suspended" ? (
             <p className="error">Akun Provider sedang ditangguhkan.</p>
           ) : null}
@@ -160,25 +187,38 @@ export function ProviderPanelPage() {
             <p>{p.bio}</p>
           ) : (
             <p>
-              <Link className="text-link" to="/provider/onboarding?step=personal">
+              <Link
+                className="text-link"
+                to="/provider/onboarding?step=personal"
+              >
                 Bio belum diisi.
               </Link>
             </p>
           )}
           <div className="tags">
-            {p.categories.map((category) => <Badge key={category.id}>{category.name}</Badge>)}
-            {p.skills.map((skill) => <Badge key={`skill-${skill}`}>{skill}</Badge>)}
-            {p.languages.map((language) => <Badge key={`language-${language}`}>{language}</Badge>)}
+            {p.categories.map((category) => (
+              <Badge key={category.id}>{category.name}</Badge>
+            ))}
+            {p.skills.map((skill) => (
+              <Badge key={`skill-${skill}`}>{skill}</Badge>
+            ))}
+            {p.languages.map((language) => (
+              <Badge key={`language-${language}`}>{language}</Badge>
+            ))}
           </div>
           <dl>
             <dt>Pengalaman</dt>
             <dd>
               {p.yearsOfExperience > 0 || p.jobsCompletedCount > 0 ? (
                 <>
-                  {p.yearsOfExperience} tahun · {p.jobsCompletedCount} pekerjaan selesai
+                  {p.yearsOfExperience} tahun · {p.jobsCompletedCount} pekerjaan
+                  selesai
                 </>
               ) : (
-                <Link className="text-link" to="/provider/onboarding?step=personal">
+                <Link
+                  className="text-link"
+                  to="/provider/onboarding?step=personal"
+                >
                   Belum diisi
                 </Link>
               )}
@@ -190,7 +230,10 @@ export function ProviderPanelPage() {
                   {money(p.price)} / {priceUnit(p.pricingType)}
                 </>
               ) : (
-                <Link className="text-link" to="/provider/onboarding?step=profile">
+                <Link
+                  className="text-link"
+                  to="/provider/onboarding?step=profile"
+                >
                   Belum diisi
                 </Link>
               )}
@@ -198,7 +241,10 @@ export function ProviderPanelPage() {
             <dt>Domisili</dt>
             <dd>
               {p.location || (
-                <Link className="text-link" to="/provider/onboarding?step=address">
+                <Link
+                  className="text-link"
+                  to="/provider/onboarding?step=address"
+                >
                   Belum diisi
                 </Link>
               )}
@@ -229,9 +275,16 @@ export function ProviderPanelPage() {
                   </label>
                 ))}
               </div>
-              {availabilityError && <p className="error" role="alert">{availabilityError}</p>}
-              {availabilityMessage && <p role="status">{availabilityMessage}</p>}
+              {availabilityError && (
+                <p className="error" role="alert">
+                  {availabilityError}
+                </p>
+              )}
+              {availabilityMessage && (
+                <p role="status">{availabilityMessage}</p>
+              )}
               <Button type="submit" disabled={availabilityBusy}>
+                {availabilityBusy && <Spinner />}
                 {availabilityBusy ? "Menyimpan…" : "Simpan ketersediaan"}
               </Button>
             </fieldset>
@@ -249,13 +302,17 @@ export function ProviderPanelPage() {
                 <Card key={order.id} className="order-card">
                   <Badge>{order.status}</Badge>
                   <h3>{order.providerName}</h3>
-                  <p>{order.scheduledDate} · {money(order.price)}</p>
+                  <p>
+                    {order.scheduledDate} · {money(order.price)}
+                  </p>
                   <p className="muted">{order.addressDetail}</p>
                 </Card>
               ))}
             </div>
           ) : orders.data ? (
-            <Card><p>Belum ada pesanan yang ditugaskan kepada Anda.</p></Card>
+            <Card>
+              <p>Belum ada pesanan yang ditugaskan kepada Anda.</p>
+            </Card>
           ) : null}
         </section>
       )}
@@ -265,11 +322,29 @@ export function ProviderPanelPage() {
           <h2>Ganti kata sandi</h2>
           <form onSubmit={changePassword}>
             <fieldset disabled={passwordBusy}>
-              <Input label="Kata sandi saat ini" name="currentPassword" type="password" autoComplete="current-password" required maxLength={256} />
-              <Input label="Kata sandi baru" name="newPassword" type="password" autoComplete="new-password" required minLength={14} maxLength={256} />
-              {passwordError && <p className="error" role="alert">{passwordError}</p>}
+              <PasswordInput
+                label="Kata sandi saat ini"
+                name="currentPassword"
+                autoComplete="current-password"
+                required
+                maxLength={256}
+              />
+              <PasswordInput
+                label="Kata sandi baru"
+                name="newPassword"
+                autoComplete="new-password"
+                required
+                minLength={14}
+                maxLength={256}
+              />
+              {passwordError && (
+                <p className="error" role="alert">
+                  {passwordError}
+                </p>
+              )}
               {passwordMessage && <p role="status">{passwordMessage}</p>}
               <Button type="submit" disabled={passwordBusy}>
+                {passwordBusy && <Spinner />}
                 {passwordBusy ? "Menyimpan…" : "Ubah kata sandi"}
               </Button>
             </fieldset>

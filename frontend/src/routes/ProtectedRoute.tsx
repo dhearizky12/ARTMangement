@@ -1,10 +1,22 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { Spinner } from "../components/ui";
 import type { Role } from "../api/authApi";
-export function ProtectedRoute({ platform = false, role }: { platform?: boolean; role?: Role }) {
+export function ProtectedRoute({
+  platform = false,
+  role,
+}: {
+  platform?: boolean;
+  role?: Role;
+}) {
   const { session, loading } = useAuth();
   const location = useLocation();
-  if (loading) return <main className="loading">Memeriksa sesi…</main>;
+  if (loading)
+    return (
+      <main className="loading">
+        <Spinner /> Memeriksa sesi…
+      </main>
+    );
   if (!session)
     return (
       <Navigate
@@ -26,7 +38,8 @@ export function ProtectedRoute({ platform = false, role }: { platform?: boolean;
       />
     );
   if (session.user.role === "Customer") return <Navigate to="/" replace />;
-  if (!role && session.user.role === "Provider") return <Navigate to="/provider/dashboard" replace />;
+  if (!role && session.user.role === "Provider")
+    return <Navigate to="/provider/dashboard" replace />;
   if (platform && session.user.role !== "PlatformAdmin")
     return <Navigate to="/admin" replace />;
   return <Outlet />;
