@@ -34,6 +34,9 @@ jobs:
           dotnet tool install --global dotnet-ef --version "10.*"
           echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
 
+      - name: Restore packages
+        run: dotnet restore backend/BantuBantu.Api
+
       - name: Apply migrations with the direct Neon URL
         run: |
           test -n "$DATABASE_URL_UNPOOLED"
