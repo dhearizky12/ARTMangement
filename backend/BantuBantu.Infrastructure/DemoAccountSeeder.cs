@@ -61,16 +61,20 @@ public sealed class DemoAccountSeeder(AppDbContext db, IPasswordService password
     public async Task SeedAsync(DemoAccountSeedOptions options, CancellationToken cancellationToken = default)
     {
         Validate(options);
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var strategy = db.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
 
-        var agency = await EnsureAgencyAsync(options, cancellationToken);
-        await EnsurePlatformAdminAsync(options, cancellationToken);
-        await EnsureAgencyAdminAsync(options, agency, cancellationToken);
-        await EnsureProviderAsync(options, cancellationToken);
-        await EnsureCustomerAsync(options, cancellationToken);
+            var agency = await EnsureAgencyAsync(options, cancellationToken);
+            await EnsurePlatformAdminAsync(options, cancellationToken);
+            await EnsureAgencyAdminAsync(options, agency, cancellationToken);
+            await EnsureProviderAsync(options, cancellationToken);
+            await EnsureCustomerAsync(options, cancellationToken);
 
-        await db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        });
     }
 
     private async Task<Agency> EnsureAgencyAsync(DemoAccountSeedOptions options, CancellationToken cancellationToken)
