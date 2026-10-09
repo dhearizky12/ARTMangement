@@ -104,6 +104,7 @@ public sealed class DemoAccountSeeder(AppDbContext db, IPasswordService password
         {
             if (existing.Role != UserRole.PlatformAdmin || existing.AgencyId is not null)
                 throw new InvalidOperationException($"Seed account email is already used by a different role: {options.PlatformAdminEmail}");
+            existing.PasswordHash = passwords.Hash(existing, options.PlatformAdminPassword);
             return;
         }
 
@@ -128,6 +129,7 @@ public sealed class DemoAccountSeeder(AppDbContext db, IPasswordService password
         {
             if (existing.Role != UserRole.AgencyAdmin || existing.AgencyId != agency.Id)
                 throw new InvalidOperationException($"Seed account email is already used by a different role: {options.AgencyAdminEmail}");
+            existing.PasswordHash = passwords.Hash(existing, options.AgencyAdminPassword);
             return;
         }
 
@@ -154,6 +156,8 @@ public sealed class DemoAccountSeeder(AppDbContext db, IPasswordService password
         {
             if (existing.Provider.ApplicationStatus == ProviderApplicationStatus.Suspended)
                 throw new InvalidOperationException($"Seed Provider is suspended: {options.ProviderEmail}");
+            existing.PasswordHash = passwords.HashProvider(options.ProviderPassword);
+            existing.PasswordChangedAt = DateTime.UtcNow;
             return;
         }
 
@@ -194,7 +198,8 @@ public sealed class DemoAccountSeeder(AppDbContext db, IPasswordService password
             }
             else if (login.ProviderKey != options.CustomerGoogleSubject)
             {
-                throw new InvalidOperationException($"Customer GoogleSubject does not match the existing login: {options.CustomerEmail}");
+                login.ProviderKey = options.CustomerGoogleSubject;
+                db.ExternalLogins.Update(login);
             }
             return;
         }
