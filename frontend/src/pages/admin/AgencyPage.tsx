@@ -1,6 +1,13 @@
 import { useState, type FormEvent } from "react";
 import { AdminLayout } from "../../components/admin/AdminLayout";
-import { Card, Input, Select, Button } from "../../components/ui";
+import {
+  Card,
+  Input,
+  PasswordInput,
+  Select,
+  Button,
+  Spinner,
+} from "../../components/ui";
 import { ResourceState } from "../../components/ResourceState";
 import { useResource } from "../../hooks/useResource";
 import { adminApi } from "../../api/marketplaceApi";
@@ -55,7 +62,10 @@ export function AgencyPage() {
                 maxLength={500}
                 required
               />
-              <Button type="submit">Buat agency aktif</Button>
+              <Button type="submit">
+                {busy && <Spinner />}
+                Buat agency aktif
+              </Button>
             </fieldset>
           </form>
         </Card>
@@ -76,10 +86,9 @@ export function AgencyPage() {
                 required
               />
               <Input label="Email admin" name="email" type="email" required />
-              <Input
+              <PasswordInput
                 label="Kata sandi awal"
                 name="password"
-                type="password"
                 minLength={14}
                 maxLength={256}
                 autoComplete="new-password"
@@ -95,7 +104,10 @@ export function AgencyPage() {
                     </option>
                   ))}
               </Select>
-              <Button type="submit">Buat akun admin</Button>
+              <Button type="submit">
+                {busy && <Spinner />}
+                Buat akun admin
+              </Button>
             </fieldset>
           </form>
         </Card>
@@ -113,12 +125,28 @@ export function AgencyPage() {
                 variant="ghost"
                 disabled={busy || a.status === status}
                 onClick={() => {
-                  if (!window.confirm(status === "Suspended"
-                    ? `Tangguhkan agency ${a.name}? Admin dan seluruh provider agency ini akan kehilangan akses/visibilitas sampai diaktifkan kembali.`
-                    : `Aktifkan kembali agency ${a.name}?`)) return;
-                  void (status === "Suspended"
-                    ? adminApi.suspendAgency(a.id)
-                    : adminApi.reactivateAgency(a.id)).then(() => result.reload()).then(() => setMessage("Status agency diperbarui.")).catch((e) => setError(e instanceof Error ? e.message : "Gagal memperbarui status agency."));
+                  if (
+                    !window.confirm(
+                      status === "Suspended"
+                        ? `Tangguhkan agency ${a.name}? Admin dan seluruh provider agency ini akan kehilangan akses/visibilitas sampai diaktifkan kembali.`
+                        : `Aktifkan kembali agency ${a.name}?`,
+                    )
+                  )
+                    return;
+                  void (
+                    status === "Suspended"
+                      ? adminApi.suspendAgency(a.id)
+                      : adminApi.reactivateAgency(a.id)
+                  )
+                    .then(() => result.reload())
+                    .then(() => setMessage("Status agency diperbarui."))
+                    .catch((e) =>
+                      setError(
+                        e instanceof Error
+                          ? e.message
+                          : "Gagal memperbarui status agency.",
+                      ),
+                    );
                 }}
               >
                 {status === "Suspended" ? "Tangguhkan" : "Aktifkan kembali"}

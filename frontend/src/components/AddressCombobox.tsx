@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { Spinner } from "./ui";
 import { wilayahApi, type VillageResult } from "../api/wilayahApi";
 export function AddressCombobox({
   onChange,
@@ -111,14 +112,16 @@ export function AddressCombobox({
       {open && (
         <div className="address-results">
           <div role="status">
-            {loading
-              ? "Mencari wilayah…"
-              : error ||
-                (query.trim().length >= 2 &&
-                !results.length &&
-                !selected.current
-                  ? "Alamat tidak ditemukan, coba kata kunci lain"
-                  : "")}
+            {loading ? (
+              <>
+                <Spinner /> Mencari wilayah…
+              </>
+            ) : (
+              error ||
+              (query.trim().length >= 2 && !results.length && !selected.current
+                ? "Alamat tidak ditemukan, coba kata kunci lain"
+                : "")
+            )}
           </div>
           <ul
             id={`${id}-list`}

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { AppShell } from "../components/AppShell";
-import { Input, Button, Card } from "../components/ui";
+import { Input, Button, Card, Spinner } from "../components/ui";
 import { AddressCombobox } from "../components/AddressCombobox";
 import { ProviderCard } from "../components/ProviderCard";
 import { ProviderGridSkeleton } from "../components/skeletons";
@@ -109,7 +109,7 @@ export function SearchPage() {
           )}
           {loadingMore && (
             <p role="status" className="load-more-status">
-              Memuat layanan lainnya…
+              <Spinner /> Memuat layanan lainnya…
             </p>
           )}
           {moreError && (

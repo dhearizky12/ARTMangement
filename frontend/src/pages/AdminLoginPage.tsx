@@ -4,7 +4,7 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
 import { authApi } from "../api/authApi";
 import { useAuth } from "../context/AuthContext";
 import { AuthLayout } from "../components/AuthLayout";
-import { Badge, Button, Input } from "../components/ui";
+import { Badge, Button, Input, PasswordInput, Spinner } from "../components/ui";
 export function AdminLoginPage() {
   const [params] = useSearchParams();
   const requested = params.get("returnTo") || "/";
@@ -56,10 +56,9 @@ export function AdminLoginPage() {
               required
               maxLength={254}
             />
-            <Input
+            <PasswordInput
               label="Kata sandi"
               name="password"
-              type="password"
               autoComplete="current-password"
               required
               maxLength={256}
@@ -70,6 +69,7 @@ export function AdminLoginPage() {
               </p>
             )}
             <Button type="submit" className="wide" disabled={busy || loading}>
+              {(busy || loading) && <Spinner />}
               {loading
                 ? "Memeriksa sesi…"
                 : busy

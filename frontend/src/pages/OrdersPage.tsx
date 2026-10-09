@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { AppShell } from "../components/AppShell";
-import { Card, Button, Select, Textarea } from "../components/ui";
+import { Card, Button, Select, Textarea, Spinner } from "../components/ui";
 import { ResourceState } from "../components/ResourceState";
 import { OrderListSkeleton } from "../components/skeletons";
 import { useResource } from "../hooks/useResource";
@@ -105,7 +105,9 @@ export function OrdersPage() {
     <AppShell>
       <h1>Pesanan saya</h1>
       {loading ? (
-        <p>Memeriksa sesi…</p>
+        <p className="loading">
+          <Spinner /> Memeriksa sesi…
+        </p>
       ) : session?.user.role === "Customer" ? (
         <CustomerOrders />
       ) : (
