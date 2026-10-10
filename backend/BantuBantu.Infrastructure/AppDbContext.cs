@@ -41,6 +41,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<Provider>().Property(x => x.Version).IsRowVersion();
         b.Entity<Provider>().HasOne(x => x.Agency).WithMany().HasForeignKey(x => x.AgencyId).OnDelete(DeleteBehavior.Restrict);
         b.Entity<Provider>().HasOne(x => x.Village).WithMany().HasForeignKey(x => x.VillageId).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<Provider>().HasIndex(x => new { x.ApplicationStatus, x.VerificationStatus });
         b.Entity<ProviderCredential>().HasKey(x => x.ProviderId);
         b.Entity<ProviderCredential>().HasOne(x => x.Provider).WithOne(x => x.Credential).HasForeignKey<ProviderCredential>(x => x.ProviderId).OnDelete(DeleteBehavior.Cascade);
         b.Entity<ProviderCredential>().HasIndex(x => x.Email).IsUnique();
