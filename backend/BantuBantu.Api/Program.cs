@@ -8,10 +8,12 @@ using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using BantuBantu.Api;
+using BantuBantu.Infrastructure.Notifications;
 var builder = WebApplication.CreateBuilder(args);
 var seedMode = args.Contains("--seed-admin") || args.Contains("--seed-accounts");
 var databaseConnection = new DatabaseConnectionStringResolver().Resolve(builder.Configuration);
 var originPolicy = seedMode ? null : AllowedOriginPolicy.FromConfiguration(builder.Configuration);
+var (notifications, appSettings, emailSettings) = NotificationSettingsFactory.FromConfiguration(builder.Configuration);
 var storageProvider = (builder.Configuration["Storage:Provider"] ?? "Local").Trim();
 if (!seedMode)
 {
@@ -33,6 +35,18 @@ if (!seedMode)
             if (string.IsNullOrWhiteSpace(builder.Configuration[key]))
                 throw new InvalidOperationException($"Missing configuration: {key} (required when EmailVerification:Enabled=true). Run scripts/provision-resend-key.sh and set RESEND_FROM.");
     foreach (var key in new[] { "Jwt:AccessMinutes", "Jwt:RefreshDays" }) if (!int.TryParse(builder.Configuration[key], out var value) || value < 1) throw new InvalidOperationException($"Invalid configuration: {key}");
+    // Transactional business notifications go through the same Resend sending
+    // path. Fail fast when Notifications are switched on without a key + from-address.
+    if (notifications.Enabled && !builder.Environment.IsDevelopment())
+        foreach (var key in new[] { "Resend:ApiKey", "Resend:From" })
+            if (string.IsNullOrWhiteSpace(builder.Configuration[key]))
+                throw new InvalidOperationException($"Missing configuration: {key} (required when Notifications:Enabled=true outside Development). Run scripts/provision-resend-key.sh and set RESEND_FROM.");
+    if (!notifications.Enabled && !builder.Environment.IsDevelopment())
+        Console.Error.WriteLine("WARNING: Notifications:Enabled=false. No transactional emails will be sent.");
+    // Provider notification addresses are gated on EmailVerifiedAt only while 2FA is on
+    // (the 2FA code verification is the only writer of that Notifications field).
+    if (notifications.Enabled && !twoFactor.Enabled)
+        Console.Error.WriteLine("WARNING: Notifications are enabled while TwoFactor:Enabled=false, so provider emails are sent without EmailVerifiedAt gating.");
 }
 builder.Logging.AddProvider(new JsonFileLoggerProvider(builder.Configuration));
 builder.Services.AddControllers().AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));
@@ -79,6 +93,13 @@ builder.Services.AddSingleton<IPasswordService, PasswordService>();
 builder.Services.AddScoped<DemoAccountSeeder>();
 builder.Services.AddSingleton<RsaKeys>();
 builder.Services.AddSingleton<ITokenService, TokenService>();
+builder.Services.AddSingleton(notifications);
+builder.Services.AddSingleton(appSettings);
+builder.Services.AddSingleton(emailSettings);
+builder.Services.AddScoped<INotificationOutbox, NotificationOutbox>();
+builder.Services.AddScoped<INotificationData, NotificationData>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddHostedService<EmailOutboxWorker>();
 if (originPolicy is null)
     builder.Services.AddCors();
 else

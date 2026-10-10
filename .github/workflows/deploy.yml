@@ -31,6 +31,16 @@ jobs:
             # Resend (sending key stays out of job env; see the restore step below)
             RESEND_FROM: ${{ secrets.RESEND_FROM }}
             EMAIL_VERIFICATION_ENABLED: ${{ vars.EMAIL_VERIFICATION_ENABLED }}
+            # Transactional notification outbox (staging repo variables;
+            # runtime defaults apply when unset). Enabling Notifications
+            # requires RESEND_FROM + the sending-only key for Notifications,
+            # enforced by deploy-be.sh and Program.cs. Links for Notifications
+            APP_FRONTEND_BASE_URL: ${{ vars.APP_FRONTEND_BASE_URL }}
+            EMAIL_REPLY_TO: ${{ vars.EMAIL_REPLY_TO }}
+            NOTIFICATIONS_ENABLED: ${{ vars.NOTIFICATIONS_ENABLED }}
+            NOTIFICATIONS_OUTBOX_POLL_SECONDS: ${{ vars.NOTIFICATIONS_OUTBOX_POLL_SECONDS }}
+            NOTIFICATIONS_MAX_ATTEMPTS: ${{ vars.NOTIFICATIONS_MAX_ATTEMPTS }}
+            NOTIFICATIONS_MAX_PER_RECIPIENT_PER_HOUR: ${{ vars.NOTIFICATIONS_MAX_PER_RECIPIENT_PER_HOUR }}
 
         steps:
             - name: Checkout
@@ -85,6 +95,12 @@ jobs:
                   write_env MONSTERASP_FTP_PASSWORD "$MONSTERASP_FTP_PASSWORD" >> .env
                   write_env RESEND_FROM "${RESEND_FROM:-}" >> .env
                   write_env EMAIL_VERIFICATION_ENABLED "${EMAIL_VERIFICATION_ENABLED:-false}" >> .env
+                  write_env APP_FRONTEND_BASE_URL "${APP_FRONTEND_BASE_URL:-}" >> .env
+                  write_env EMAIL_REPLY_TO "${EMAIL_REPLY_TO:-}" >> .env
+                  write_env NOTIFICATIONS_ENABLED "${NOTIFICATIONS_ENABLED:-false}" >> .env
+                  write_env NOTIFICATIONS_OUTBOX_POLL_SECONDS "${NOTIFICATIONS_OUTBOX_POLL_SECONDS:-30}" >> .env
+                  write_env NOTIFICATIONS_MAX_ATTEMPTS "${NOTIFICATIONS_MAX_ATTEMPTS:-6}" >> .env
+                  write_env NOTIFICATIONS_MAX_PER_RECIPIENT_PER_HOUR "${NOTIFICATIONS_MAX_PER_RECIPIENT_PER_HOUR:-10}" >> .env
 
             - name: Deploy and verify backend
               run: bash ./deploy-be.sh

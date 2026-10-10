@@ -25,6 +25,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Review> Reviews => Set<Review>();
     public DbSet<ContentBlock> ContentBlocks => Set<ContentBlock>();
     public DbSet<AuditLogEntry> AuditEntries => Set<AuditLogEntry>();
+    public DbSet<EmailOutbox> EmailOutboxes => Set<EmailOutbox>();
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.Entity<User>().ToTable("Users");
@@ -93,6 +94,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<AuditLogEntry>().ToTable("AuditEntries");
         b.Entity<AuditLogEntry>().HasIndex(x => x.CreatedAt);
         b.Entity<AuditLogEntry>().HasIndex(x => new { x.TargetEntityType, x.TargetEntityId });
+        b.Entity<EmailOutbox>().Property(x => x.Status).HasConversion<string>();
+        b.Entity<EmailOutbox>().HasIndex(x => x.DedupeKey).IsUnique();
+        b.Entity<EmailOutbox>().HasIndex(x => new { x.Status, x.NextAttemptAt });
     }
 }
 public class AuthRepository(AppDbContext db) : IAuthRepository

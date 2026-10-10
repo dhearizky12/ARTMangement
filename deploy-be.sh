@@ -493,6 +493,33 @@ export EmailVerification__Enabled="${EMAIL_VERIFICATION_ENABLED:-false}"
 unset RESEND_SENDING_KEY
 
 
+
+
+
+
+
+
+
+
+
+# App links + transactional notifications (outbox)
+# App__FrontendBaseUrl builds the links inside notification emails and
+# defaults to the staging frontend origin. Notifications__Enabled=false
+# mandatory for Notifications, exactly as Program.cs enforces at startup.
+
+export App__FrontendBaseUrl="${APP_FRONTEND_BASE_URL:-$STAGING_FRONTEND_ORIGIN}"
+
+export Email__ReplyTo="${EMAIL_REPLY_TO:-}"
+
+export Notifications__Enabled="${NOTIFICATIONS_ENABLED:-false}"
+
+export Notifications__OutboxPollSeconds="${NOTIFICATIONS_OUTBOX_POLL_SECONDS:-30}"
+
+export Notifications__MaxAttempts="${NOTIFICATIONS_MAX_ATTEMPTS:-6}"
+
+export Notifications__MaxPerRecipientPerHour="${NOTIFICATIONS_MAX_PER_RECIPIENT_PER_HOUR:-10}"
+
+
 # ------------------------------------------------------------
 # Storage
 #
@@ -624,6 +651,33 @@ case "${EmailVerification__Enabled:-false}" in
 esac
 
 
+# Notifications configuration
+#
+# Mirrors NotificationSettingsFactory validation. NOTIFICATIONS_ENABLED=true
+# requires the Resend sending path exactly like Program.cs does at startup.
+# (Reuses the generic bool/int helpers also used by the 2FA section for
+# Notifications values.)
+# ------------------------------------------------------------
+
+two_factor_bool Notifications__Enabled "Notifications__Enabled"
+
+two_factor_int Notifications__OutboxPollSeconds "Notifications__OutboxPollSeconds" 5 300
+two_factor_int Notifications__MaxAttempts "Notifications__MaxAttempts" 1 10
+two_factor_int Notifications__MaxPerRecipientPerHour "Notifications__MaxPerRecipientPerHour" 1 100
+
+case "${Notifications__Enabled:-false}" in
+    [Tt][Rr][Uu][Ee])
+
+        [[ -n "${Resend__ApiKey:-}" ]] \
+            || fail "Notifications__Enabled=true membutuhkan Resend__ApiKey (sending-only key). Buat dengan scripts/provision-resend-key.sh."
+
+        [[ -n "${Resend__From:-}" ]] \
+            || fail "Notifications__Enabled=true membutuhkan Resend__From (alamat pengirim pada domain Resend terverifikasi)."
+
+        ;;
+esac
+
+
 echo
 echo "Required application configuration OK."
 
@@ -647,6 +701,12 @@ echo "  Database               : configured"
 echo "  EmailVerification      : ${EmailVerification__Enabled:-false}"
 echo "  Resend:ApiKey          : $(if [[ -n "${Resend__ApiKey:-}" ]]; then echo "configured ($(basename "$RESEND_API_KEY_FILE"))"; else echo "not set"; fi)"
 echo "  Resend:From            : ${Resend__From:-not set}"
+echo "  App:FrontendBaseUrl           : ${App__FrontendBaseUrl:-not set}"
+echo "  Email:ReplyTo                 : ${Email__ReplyTo:-not set}"
+echo "  Notifications:Enabled         : ${Notifications__Enabled:-false}"
+echo "  Notifications:OutboxPollSeconds : ${Notifications__OutboxPollSeconds:-30}"
+echo "  Notifications:MaxAttempts     : ${Notifications__MaxAttempts:-6}"
+echo "  Notifications:MaxPerRecipientPerHour : ${Notifications__MaxPerRecipientPerHour:-10}"
 
 
 # ============================================================
@@ -800,6 +860,15 @@ variable_names = [
     "Resend__ApiKey",
     "Resend__From",
     "EmailVerification__Enabled",
+
+
+    # App links + transactional notifications (outbox)
+    "App__FrontendBaseUrl",
+    "Email__ReplyTo",
+    "Notifications__Enabled",
+    "Notifications__OutboxPollSeconds",
+    "Notifications__MaxAttempts",
+    "Notifications__MaxPerRecipientPerHour",
 
     # Storage
     "Storage__Provider",
@@ -992,6 +1061,17 @@ if values.get("EmailVerification__Enabled", "").lower() == "true" and not values
     sys.exit(1)
 
 
+if values.get("Notifications__Enabled", "").lower() == "true" and (not values.get("Resend__ApiKey") or not values.get("Resend__From")):
+
+    print(
+        "ERROR: Notifications__Enabled=true tetapi Resend__ApiKey atau Resend__From "
+        "tidak terinject. Cek scripts/provision-resend-key.sh dan RESEND_FROM.",
+        file=sys.stderr
+    )
+
+    sys.exit(1)
+
+
 print("All required hosted configuration found in web.config.")
 
 print()
@@ -1031,6 +1111,25 @@ safe_keys = [
     "AllowedHosts",
 
     "EmailVerification__Enabled",
+
+
+
+
+
+
+
+
+    "App__FrontendBaseUrl",
+
+    "Email__ReplyTo",
+
+    "Notifications__Enabled",
+
+    "Notifications__OutboxPollSeconds",
+
+    "Notifications__MaxAttempts",
+
+    "Notifications__MaxPerRecipientPerHour",
 
     "Resend__From",
 ]

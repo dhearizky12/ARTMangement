@@ -31,6 +31,12 @@ x-api: &api
     Frontend__Origins: ${FRONTEND_ORIGINS:-}
     Frontend__OriginPatterns: ${FRONTEND_ORIGIN_PATTERNS:-}
     AllowedHosts: ${ALLOWED_HOSTS:-localhost}
+    App__FrontendBaseUrl: ${APP_FRONTEND_BASE_URL:-}
+    Email__ReplyTo: ${EMAIL_REPLY_TO:-}
+    Notifications__Enabled: ${NOTIFICATIONS_ENABLED:-false}
+    Notifications__OutboxPollSeconds: ${NOTIFICATIONS_OUTBOX_POLL_SECONDS:-30}
+    Notifications__MaxAttempts: ${NOTIFICATIONS_MAX_ATTEMPTS:-6}
+    Notifications__MaxPerRecipientPerHour: ${NOTIFICATIONS_MAX_PER_RECIPIENT_PER_HOUR:-10}
   volumes:
     - rsa_keys:/run/keys:ro
     - document_data:/app-data/documents
