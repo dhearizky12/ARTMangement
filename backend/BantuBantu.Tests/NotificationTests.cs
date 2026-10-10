@@ -32,14 +32,17 @@ public sealed class NotificationTests
     }
     private sealed class RecordingSender : IEmailSender
     {
+        private readonly object gate = new();
         public readonly List<EmailMessage> Sent = [];
         public Func<EmailMessage, Exception?> FailWith = _ => null;
-        public Task SendAsync(EmailMessage message, CancellationToken ct = default)
+        public TimeSpan? DelayFor;
+        public Func<EmailMessage, bool> DelayWhen = _ => true;
+        public async Task SendAsync(EmailMessage message, CancellationToken ct = default)
         {
+            if (DelayFor.HasValue && DelayWhen(message)) await Task.Delay(DelayFor.Value, ct);
             var failure = FailWith(message);
             if (failure is not null) throw failure;
-            Sent.Add(message);
-            return Task.CompletedTask;
+            lock (gate) Sent.Add(message);
         }
     }
     private sealed class StaticActor(Actor actor) : ICurrentActor
@@ -57,11 +60,11 @@ public sealed class NotificationTests
         public async Task SaveAsync() => await Db.SaveChangesAsync();
         public void Dispose() => Db.Dispose();
     }
-    private static Harness NewHarness(bool enabled = true, bool twoFactorEnabled = false, int maxPerHour = 100, int maxAttempts = 6)
+    private static Harness NewHarness(bool enabled = true, bool twoFactorEnabled = false, int maxPerHour = 100, int maxAttempts = 6, int opportunisticTimeoutSeconds = 30)
     {
         var db = NewDb();
         var sender = new RecordingSender();
-        var settings = new NotificationSettings { Enabled = enabled, OutboxPollSeconds = 30, MaxAttempts = maxAttempts, MaxPerRecipientPerHour = maxPerHour };
+        var settings = new NotificationSettings { Enabled = enabled, OutboxPollSeconds = 30, MaxAttempts = maxAttempts, MaxPerRecipientPerHour = maxPerHour, OpportunisticTimeoutSeconds = opportunisticTimeoutSeconds };
         var renderer = new NotificationRenderer(new AppSettings { FrontendBaseUrl = "https://app.example.test" }, new EmailSettings());
         var twoFactor = new TwoFactorSettings { Enabled = twoFactorEnabled };
         var outbox = new NotificationOutbox(db, settings, renderer, sender, NullLogger<NotificationOutbox>.Instance);
@@ -378,6 +381,63 @@ public sealed class NotificationTests
             rows = await harness.Db.EmailOutboxes.Where(o => o.To == $"{tag}-provider@example.test").OrderBy(o => o.CreatedAt).ToListAsync();
             Assert.Equal(3, rows.Count);
             Assert.Equal(EmailOutboxStatus.Suppressed, rows[2].Status);
+        }
+        finally { await DeleteGraphAsync(harness.Db, tag); harness.Dispose(); }
+    }
+
+    [Fact]
+    public async Task OpportunisticSendRespectsBudgetAndLeavesRowsPending()
+    {
+        const string tag = "nb-budget";
+        var harness = NewHarness(opportunisticTimeoutSeconds: 1);
+        try
+        {
+            await SeedAreaAsync(harness.Db);
+            var (_, providerId, _) = await SeedOrderGraphAsync(harness.Db, tag, agencyScoped: false, providerVerified: true);
+            var ct = default(CancellationToken);
+            await harness.Service.EmitApplicationSubmittedAsync(providerId, 0, ct);
+            await harness.SaveAsync();
+            harness.Sender.DelayFor = TimeSpan.FromSeconds(5);
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            await harness.Service.DispatchEnqueuedAsync(ct);
+            sw.Stop();
+            await harness.SaveAsync();
+            Assert.Empty(harness.Sender.Sent);
+            Assert.True(sw.Elapsed < TimeSpan.FromSeconds(4), $"dispatch took {sw.Elapsed}, budget is 1s");
+            var rows = await harness.Db.EmailOutboxes.Where(o => o.To.StartsWith(tag + "-")).ToListAsync();
+            Assert.Equal(2, rows.Count);
+            Assert.All(rows, r =>
+            {
+                Assert.Equal(EmailOutboxStatus.Pending, r.Status);
+                Assert.Equal(0, r.Attempts);
+                Assert.True(r.NextAttemptAt <= DateTimeOffset.UtcNow.AddMinutes(1));
+            });
+        }
+        finally { await DeleteGraphAsync(harness.Db, tag); harness.Dispose(); }
+    }
+
+    [Fact]
+    public async Task OpportunisticSendMixedFastAndSlow()
+    {
+        const string tag = "nb-mixed";
+        var harness = NewHarness(opportunisticTimeoutSeconds: 1);
+        try
+        {
+            await SeedAreaAsync(harness.Db);
+            var (_, providerId, _) = await SeedOrderGraphAsync(harness.Db, tag, agencyScoped: false, providerVerified: true);
+            var ct = default(CancellationToken);
+            await harness.Service.EmitApplicationSubmittedAsync(providerId, 0, ct);
+            await harness.SaveAsync();
+            harness.Sender.DelayFor = TimeSpan.FromSeconds(5);
+            harness.Sender.DelayWhen = m => m.To == $"{tag}-provider@example.test";
+            await harness.Service.DispatchEnqueuedAsync(ct);
+            await harness.SaveAsync();
+            Assert.Single(harness.Sender.Sent, m => m.To == $"{tag}-platform-admin@example.test");
+            var providerRow = await harness.Db.EmailOutboxes.SingleAsync(o => o.To == $"{tag}-provider@example.test");
+            Assert.Equal(EmailOutboxStatus.Pending, providerRow.Status);
+            Assert.Equal(0, providerRow.Attempts);
+            var adminRow = await harness.Db.EmailOutboxes.SingleAsync(o => o.To == $"{tag}-platform-admin@example.test");
+            Assert.Equal(EmailOutboxStatus.Sent, adminRow.Status);
         }
         finally { await DeleteGraphAsync(harness.Db, tag); harness.Dispose(); }
     }

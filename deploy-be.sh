@@ -537,6 +537,8 @@ export Notifications__MaxAttempts="${NOTIFICATIONS_MAX_ATTEMPTS:-6}"
 
 export Notifications__MaxPerRecipientPerHour="${NOTIFICATIONS_MAX_PER_RECIPIENT_PER_HOUR:-10}"
 
+export Notifications__OpportunisticTimeoutSeconds="${NOTIFICATIONS_OPPORTUNISTIC_TIMEOUT_SECONDS:-2}"
+
 
 # ------------------------------------------------------------
 # Storage
@@ -733,6 +735,7 @@ two_factor_bool Notifications__Enabled "Notifications__Enabled"
 two_factor_int Notifications__OutboxPollSeconds "Notifications__OutboxPollSeconds" 5 300
 two_factor_int Notifications__MaxAttempts "Notifications__MaxAttempts" 1 10
 two_factor_int Notifications__MaxPerRecipientPerHour "Notifications__MaxPerRecipientPerHour" 1 100
+two_factor_int Notifications__OpportunisticTimeoutSeconds "Notifications__OpportunisticTimeoutSeconds" 1 30
 
 case "${Notifications__Enabled:-false}" in
     [Tt][Rr][Uu][Ee])
@@ -783,6 +786,7 @@ echo "  Notifications:Enabled         : ${Notifications__Enabled:-false}"
 echo "  Notifications:OutboxPollSeconds : ${Notifications__OutboxPollSeconds:-30}"
 echo "  Notifications:MaxAttempts     : ${Notifications__MaxAttempts:-6}"
 echo "  Notifications:MaxPerRecipientPerHour : ${Notifications__MaxPerRecipientPerHour:-10}"
+echo "  Notifications:OpportunisticTimeoutSeconds : ${Notifications__OpportunisticTimeoutSeconds:-2}"
 
 
 # ============================================================
@@ -953,6 +957,7 @@ variable_names = [
     "Notifications__OutboxPollSeconds",
     "Notifications__MaxAttempts",
     "Notifications__MaxPerRecipientPerHour",
+    "Notifications__OpportunisticTimeoutSeconds",
 
     # Storage
     "Storage__Provider",
@@ -1232,6 +1237,8 @@ safe_keys = [
     "Notifications__MaxAttempts",
 
     "Notifications__MaxPerRecipientPerHour",
+
+    "Notifications__OpportunisticTimeoutSeconds",
 
     "Resend__From",
 ]

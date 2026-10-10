@@ -40,31 +40,70 @@ public class NotificationOutbox(AppDbContext db, NotificationSettings settings, 
         return row;
     }
     /// <summary>One best-effort immediate send per staged row, right after
-    /// commit. Failures are swallowed: the row stays Pending and the poller
-    /// retries. Never throws.</summary>
+    /// commit. Recipients are attempted concurrently under a short total
+    /// budget (<c>Notifications:OpportunisticTimeoutSeconds</c>) so a slow
+    /// mail provider cannot hold the request open. Anything unsent — timeout
+    /// or error — stays Pending for the poller; a timeout never fails a row
+    /// and never consumes an attempt. Never throws.</summary>
     public async Task DispatchEnqueuedAsync(CancellationToken ct)
     {
-        foreach (var row in staged.ToArray())
+        var pending = staged.Where(row => row.Status == EmailOutboxStatus.Pending).ToArray();
+        if (pending.Length == 0) return;
+        using var budget = new CancellationTokenSource(TimeSpan.FromSeconds(settings.OpportunisticTimeoutSeconds));
+        var outcomes = await Task.WhenAll(pending.Select(row => TryDispatchAsync(row, budget.Token)));
+        var sent = 0;
+        var left = 0;
+        foreach (var (row, outcome) in pending.Zip(outcomes))
         {
-            if (row.Status != EmailOutboxStatus.Pending) continue;
-            try
+            if (outcome.Sent)
             {
-                var rendered = renderer.Render(row.TemplateKey, JsonDocument.Parse(row.PayloadJson).RootElement);
-                await sender.SendAsync(new EmailMessage(row.To, rendered.Subject, rendered.Html, rendered.Text, row.DedupeKey), ct);
                 row.Status = EmailOutboxStatus.Sent;
                 row.SentAt = DateTimeOffset.UtcNow;
                 staged.Remove(row);
+                sent++;
+                continue;
             }
-            catch (Exception ex)
+            left++;
+            if (outcome.TimedOut) row.NextAttemptAt = DateTimeOffset.UtcNow;
+            else
             {
                 row.Attempts++;
                 row.NextAttemptAt = DateTimeOffset.UtcNow + EmailOutboxWorker.RetryDelay(row.Attempts);
-                row.LastError = EmailOutboxWorker.SanitizeError(ex);
-                logger.LogWarning(ex, "Opportunistic notification send failed, left Pending: event {EventType} to {To} attempt {Attempts}.", row.EventType, row.To, row.Attempts);
+                row.LastError = outcome.Error;
             }
         }
+        if (left > 0)
+            logger.LogInformation("Opportunistic notification dispatch sent {Sent} immediately, {Left} left Pending for the poller.", sent, left);
         if (staged.Count == 0) return;
         try { await db.SaveChangesAsync(ct); }
         catch (Exception ex) { logger.LogWarning(ex, "Failed to persist opportunistic notification outcomes; poller will retry."); }
+    }
+    private async Task<(bool Sent, bool TimedOut, string? Error)> TryDispatchAsync(EmailOutbox row, CancellationToken ct)
+    {
+        RenderedEmail rendered;
+        try
+        {
+            using var document = JsonDocument.Parse(row.PayloadJson);
+            rendered = renderer.Render(row.TemplateKey, document.RootElement);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Opportunistic notification render failed, left Pending: event {EventType} to {To}.", row.EventType, row.To);
+            return (false, false, EmailOutboxWorker.SanitizeError(ex));
+        }
+        try
+        {
+            await sender.SendAsync(new EmailMessage(row.To, rendered.Subject, rendered.Html, rendered.Text, row.DedupeKey), ct);
+            return (true, false, null);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            return (false, true, null);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Opportunistic notification send failed, left Pending: event {EventType} to {To}.", row.EventType, row.To);
+            return (false, false, EmailOutboxWorker.SanitizeError(ex));
+        }
     }
 }

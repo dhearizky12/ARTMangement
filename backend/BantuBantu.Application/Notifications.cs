@@ -10,6 +10,9 @@ public record NotificationSettings
     public int OutboxPollSeconds { get; init; } = 30;
     public int MaxAttempts { get; init; } = 6;
     public int MaxPerRecipientPerHour { get; init; } = 10;
+    // Total budget for the opportunistic post-commit send. Rows not sent
+    // within the budget stay Pending for the poller; a timeout never fails.
+    public int OpportunisticTimeoutSeconds { get; init; } = 2;
 }
 public record AppSettings
 {

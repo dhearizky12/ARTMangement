@@ -26,7 +26,8 @@ public static class NotificationSettingsFactory
             Enabled = Flag(configuration, "Notifications:Enabled", false),
             OutboxPollSeconds = Int(configuration, "Notifications:OutboxPollSeconds", 30, 5, 300),
             MaxAttempts = Int(configuration, "Notifications:MaxAttempts", 6, 1, 10),
-            MaxPerRecipientPerHour = Int(configuration, "Notifications:MaxPerRecipientPerHour", 10, 1, 100)
+            MaxPerRecipientPerHour = Int(configuration, "Notifications:MaxPerRecipientPerHour", 10, 1, 100),
+            OpportunisticTimeoutSeconds = Int(configuration, "Notifications:OpportunisticTimeoutSeconds", 2, 1, 30)
         };
         var baseUrl = (configuration["App:FrontendBaseUrl"] ?? "").Trim();
         if (string.IsNullOrWhiteSpace(baseUrl))

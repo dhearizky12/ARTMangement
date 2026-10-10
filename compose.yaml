@@ -44,6 +44,7 @@ x-api: &api
     Notifications__OutboxPollSeconds: ${NOTIFICATIONS_OUTBOX_POLL_SECONDS:-30}
     Notifications__MaxAttempts: ${NOTIFICATIONS_MAX_ATTEMPTS:-6}
     Notifications__MaxPerRecipientPerHour: ${NOTIFICATIONS_MAX_PER_RECIPIENT_PER_HOUR:-10}
+    Notifications__OpportunisticTimeoutSeconds: ${NOTIFICATIONS_OPPORTUNISTIC_TIMEOUT_SECONDS:-2}
   volumes:
     - rsa_keys:/run/keys:ro
     - document_data:/app-data/documents
