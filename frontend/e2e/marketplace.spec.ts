@@ -121,7 +121,7 @@ test.describe("live marketplace", () => {
       await page
         .getByRole("button", { name: "Masuk sebagai admin", exact: true })
         .click();
-      await expect(page).toHaveURL(/\/admin$/);
+      await expect(page).toHaveURL(/\/admin\/dashboard$/);
       await page.getByRole("button", { name: "Buat draft penyedia" }).click();
       await expect(page).toHaveURL(/\/admin\/providers\//);
       await page

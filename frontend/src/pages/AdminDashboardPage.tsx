@@ -287,6 +287,7 @@ export function AdminDashboardPage() {
         : Promise.resolve([] as Agency[]),
     "roster-agencies",
   );
+  const orders = useResource(adminApi.orders, "dashboard-orders");
   const [agencyId, setAgencyId] = useState("");
   const [providerEmail, setProviderEmail] = useState("");
   const [providerPassword, setProviderPassword] = useState("");
@@ -311,6 +312,31 @@ export function AdminDashboardPage() {
   return (
     <AdminLayout>
       <h1>Kelola penyedia jasa</h1>
+      <div className="stats-grid">
+        <Card>
+          <span>Queue verifikasi</span>
+          <strong>{verificationQueue.data?.length ?? "—"}</strong>
+        </Card>
+        <Card>
+          <span>Pesanan menunggu</span>
+          <strong>
+            {orders.data
+              ? orders.data.filter((o) => o.status === "Pending").length
+              : "—"}
+          </strong>
+        </Card>
+        {session?.user.role === "PlatformAdmin" ? (
+          <Card>
+            <span>Agency</span>
+            <strong>{agencies.data?.length ?? "—"}</strong>
+          </Card>
+        ) : (
+          <Card>
+            <span>Roster provider</span>
+            <strong>{roster.data?.length ?? "—"}</strong>
+          </Card>
+        )}
+      </div>
       <Card>
         <h2>Daftarkan penyedia</h2>
         {session?.user.role === "PlatformAdmin" ? (

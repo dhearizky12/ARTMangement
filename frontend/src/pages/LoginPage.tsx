@@ -1,4 +1,4 @@
-import { ShieldCheck, ArrowUpRight } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 import { Badge, Spinner } from "../components/ui";
 import { useState } from "react";
 import { GoogleLogin } from "@react-oauth/google";
@@ -21,7 +21,13 @@ export function LoginPage() {
   if (session)
     return (
       <Navigate
-        to={session.user.role !== "Customer" ? "/admin" : returnTo}
+        to={
+          session.user.role === "Provider"
+            ? "/provider/dashboard"
+            : session.user.role === "Customer"
+              ? returnTo
+              : "/admin/dashboard"
+        }
         replace
       />
     );
@@ -77,12 +83,6 @@ export function LoginPage() {
               {error || connectionError}
             </p>
           )}
-          <p className="admin-link">
-            Mengelola platform?{" "}
-            <Link to="/admin/login">
-              Masuk sebagai admin <ArrowUpRight aria-hidden="true" />
-            </Link>
-          </p>
         </div>
         <div className="divider" />
         <div className="privacy">

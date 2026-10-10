@@ -623,9 +623,6 @@ dd {
   justify-content: center;
   font-size: var(--text-caption);
 }
-.account-login-actions + .admin-link {
-  margin-top: var(--space-4);
-}
 dt {
   font-size: var(--text-caption);
   color: var(--color-muted);
@@ -826,18 +823,19 @@ dd {
   border-top: 2px solid var(--color-ink);
   margin: var(--space-5) 0;
 }
-.admin-link {
-  font-size: var(--text-caption);
-  margin: 0;
-  text-align: center;
-}
-.admin-link a {
-  display: inline-flex;
-  min-height: var(--touch);
+.admin-auth {
+  min-height: 100dvh;
+  display: flex;
   align-items: center;
   justify-content: center;
+  padding: var(--space-6) calc(var(--space-4) + var(--shadow-offset))
+    var(--space-5) var(--space-4);
+  background: var(--color-primary-soft);
+}
+.admin-auth .brand {
+  display: inline-flex;
+  margin-bottom: var(--space-5);
   color: var(--color-primary);
-  font-weight: var(--weight-title);
 }
 .loading {
   padding: var(--space-7) var(--space-5);

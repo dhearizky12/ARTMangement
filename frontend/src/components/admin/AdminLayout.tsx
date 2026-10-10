@@ -1,17 +1,18 @@
 import type { ReactNode } from "react";
-import { Link, NavLink } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 import { Brand } from "../Brand";
 import { useAuth } from "../../context/AuthContext";
+import { LogoutButton } from "../LogoutButton";
+import { useAdminMeta } from "../../hooks/useAdminMeta";
 export function AdminLayout({ children }: { children: ReactNode }) {
   const { session } = useAuth();
+  useAdminMeta();
   return (
     <>
       <header className="site-header">
         <div className="header-inner">
-          <Brand />
-          <Link className="text-link" to="/account">
-            Akun
-          </Link>
+          <Brand to="/admin/dashboard" />
+          <LogoutButton variant="text" redirectTo="/admin/login" />
         </div>
       </header>
       <main className="page admin-page">
@@ -21,10 +22,19 @@ export function AdminLayout({ children }: { children: ReactNode }) {
             : "Ruang kelola platform"}
         </p>
         <nav className="filter-chips" aria-label="Menu admin">
-          <NavLink className="btn btn-ghost" to="/admin#verification-queue">
+          <NavLink className="btn btn-ghost" to="/admin/dashboard">
+            Dashboard
+          </NavLink>
+          <NavLink
+            className="btn btn-ghost"
+            to="/admin/dashboard#verification-queue"
+          >
             Queue verifikasi
           </NavLink>
-          <NavLink className="btn btn-ghost" to="/admin#provider-roster">
+          <NavLink
+            className="btn btn-ghost"
+            to="/admin/dashboard#provider-roster"
+          >
             Roster provider
           </NavLink>
           <NavLink className="btn btn-ghost" to="/admin/orders">
