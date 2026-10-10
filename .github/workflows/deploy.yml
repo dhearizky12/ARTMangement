@@ -41,6 +41,17 @@ jobs:
             TWO_FACTOR_RESEND_COOLDOWN_SECONDS: ${{ vars.TWO_FACTOR_RESEND_COOLDOWN_SECONDS }}
             TWO_FACTOR_MAX_RESENDS_PER_HOUR: ${{ vars.TWO_FACTOR_MAX_RESENDS_PER_HOUR }}
             TWO_FACTOR_MAX_SKIPS_PER_HOUR: ${{ vars.TWO_FACTOR_MAX_SKIPS_PER_HOUR }}
+            # Transactional notification outbox (staging repo variables;
+            # runtime defaults apply when unset). Enabling Notifications
+            # requires RESEND_FROM + the sending-only key for Notifications,
+            # enforced by deploy-be.sh and Program.cs. Links for Notifications
+            # default to FRONTEND_ORIGIN.
+            APP_FRONTEND_BASE_URL: ${{ vars.APP_FRONTEND_BASE_URL }}
+            EMAIL_REPLY_TO: ${{ vars.EMAIL_REPLY_TO }}
+            NOTIFICATIONS_ENABLED: ${{ vars.NOTIFICATIONS_ENABLED }}
+            NOTIFICATIONS_OUTBOX_POLL_SECONDS: ${{ vars.NOTIFICATIONS_OUTBOX_POLL_SECONDS }}
+            NOTIFICATIONS_MAX_ATTEMPTS: ${{ vars.NOTIFICATIONS_MAX_ATTEMPTS }}
+            NOTIFICATIONS_MAX_PER_RECIPIENT_PER_HOUR: ${{ vars.NOTIFICATIONS_MAX_PER_RECIPIENT_PER_HOUR }}
 
         steps:
             - name: Checkout
@@ -102,6 +113,12 @@ jobs:
                   write_env TWO_FACTOR_RESEND_COOLDOWN_SECONDS "${TWO_FACTOR_RESEND_COOLDOWN_SECONDS:-60}" >> .env
                   write_env TWO_FACTOR_MAX_RESENDS_PER_HOUR "${TWO_FACTOR_MAX_RESENDS_PER_HOUR:-5}" >> .env
                   write_env TWO_FACTOR_MAX_SKIPS_PER_HOUR "${TWO_FACTOR_MAX_SKIPS_PER_HOUR:-3}" >> .env
+                  write_env APP_FRONTEND_BASE_URL "${APP_FRONTEND_BASE_URL:-}" >> .env
+                  write_env EMAIL_REPLY_TO "${EMAIL_REPLY_TO:-}" >> .env
+                  write_env NOTIFICATIONS_ENABLED "${NOTIFICATIONS_ENABLED:-false}" >> .env
+                  write_env NOTIFICATIONS_OUTBOX_POLL_SECONDS "${NOTIFICATIONS_OUTBOX_POLL_SECONDS:-30}" >> .env
+                  write_env NOTIFICATIONS_MAX_ATTEMPTS "${NOTIFICATIONS_MAX_ATTEMPTS:-6}" >> .env
+                  write_env NOTIFICATIONS_MAX_PER_RECIPIENT_PER_HOUR "${NOTIFICATIONS_MAX_PER_RECIPIENT_PER_HOUR:-10}" >> .env
 
             - name: Deploy and verify backend
               run: bash ./deploy-be.sh

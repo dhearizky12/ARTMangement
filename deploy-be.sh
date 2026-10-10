@@ -516,6 +516,27 @@ export TwoFactor__MaxResendsPerHour="${TWO_FACTOR_MAX_RESENDS_PER_HOUR:-5}"
 export TwoFactor__MaxSkipsPerHour="${TWO_FACTOR_MAX_SKIPS_PER_HOUR:-3}"
 
 
+# ------------------------------------------------------------
+# App links + transactional notifications (outbox)
+#
+# App__FrontendBaseUrl builds the links inside notification emails and
+# defaults to the staging frontend origin. Notifications__Enabled=false
+# keeps every business email off; when true the Resend sending path is
+# mandatory for Notifications, exactly as Program.cs enforces at startup.
+# ------------------------------------------------------------
+
+export App__FrontendBaseUrl="${APP_FRONTEND_BASE_URL:-$STAGING_FRONTEND_ORIGIN}"
+
+export Email__ReplyTo="${EMAIL_REPLY_TO:-}"
+
+export Notifications__Enabled="${NOTIFICATIONS_ENABLED:-false}"
+
+export Notifications__OutboxPollSeconds="${NOTIFICATIONS_OUTBOX_POLL_SECONDS:-30}"
+
+export Notifications__MaxAttempts="${NOTIFICATIONS_MAX_ATTEMPTS:-6}"
+
+export Notifications__MaxPerRecipientPerHour="${NOTIFICATIONS_MAX_PER_RECIPIENT_PER_HOUR:-10}"
+
 
 # ------------------------------------------------------------
 # Storage
@@ -699,6 +720,31 @@ case "${TwoFactor__Enabled:-false}" in
 esac
 
 # ------------------------------------------------------------
+# Notifications configuration
+#
+# Mirrors NotificationSettingsFactory validation. NOTIFICATIONS_ENABLED=true
+# requires the Resend sending path exactly like Program.cs does at startup.
+# (Reuses the generic bool/int helpers also used by the 2FA section for
+# Notifications values.)
+# ------------------------------------------------------------
+
+two_factor_bool Notifications__Enabled "Notifications__Enabled"
+
+two_factor_int Notifications__OutboxPollSeconds "Notifications__OutboxPollSeconds" 5 300
+two_factor_int Notifications__MaxAttempts "Notifications__MaxAttempts" 1 10
+two_factor_int Notifications__MaxPerRecipientPerHour "Notifications__MaxPerRecipientPerHour" 1 100
+
+case "${Notifications__Enabled:-false}" in
+    [Tt][Rr][Uu][Ee])
+
+        [[ -n "${Resend__ApiKey:-}" ]] \
+            || fail "Notifications__Enabled=true membutuhkan Resend__ApiKey (sending-only key). Buat dengan scripts/provision-resend-key.sh."
+
+        [[ -n "${Resend__From:-}" ]] \
+            || fail "Notifications__Enabled=true membutuhkan Resend__From (alamat pengirim pada domain Resend terverifikasi)."
+
+        ;;
+esac
 
 
 echo
@@ -731,6 +777,12 @@ echo "  TwoFactor:MaxAttempts           : ${TwoFactor__MaxAttempts:-5}"
 echo "  TwoFactor:ResendCooldownSeconds : ${TwoFactor__ResendCooldownSeconds:-60}"
 echo "  TwoFactor:MaxResendsPerHour     : ${TwoFactor__MaxResendsPerHour:-5}"
 echo "  TwoFactor:MaxSkipsPerHour       : ${TwoFactor__MaxSkipsPerHour:-3}"
+echo "  App:FrontendBaseUrl           : ${App__FrontendBaseUrl:-not set}"
+echo "  Email:ReplyTo                 : ${Email__ReplyTo:-not set}"
+echo "  Notifications:Enabled         : ${Notifications__Enabled:-false}"
+echo "  Notifications:OutboxPollSeconds : ${Notifications__OutboxPollSeconds:-30}"
+echo "  Notifications:MaxAttempts     : ${Notifications__MaxAttempts:-6}"
+echo "  Notifications:MaxPerRecipientPerHour : ${Notifications__MaxPerRecipientPerHour:-10}"
 
 
 # ============================================================
@@ -894,6 +946,13 @@ variable_names = [
     "TwoFactor__MaxResendsPerHour",
     "TwoFactor__MaxSkipsPerHour",
 
+    # App links + transactional notifications (outbox)
+    "App__FrontendBaseUrl",
+    "Email__ReplyTo",
+    "Notifications__Enabled",
+    "Notifications__OutboxPollSeconds",
+    "Notifications__MaxAttempts",
+    "Notifications__MaxPerRecipientPerHour",
 
     # Storage
     "Storage__Provider",
@@ -1097,6 +1156,15 @@ if values.get("TwoFactor__Enabled", "").lower() == "true" and (not values.get("R
     sys.exit(1)
 
 
+if values.get("Notifications__Enabled", "").lower() == "true" and (not values.get("Resend__ApiKey") or not values.get("Resend__From")):
+
+    print(
+        "ERROR: Notifications__Enabled=true tetapi Resend__ApiKey atau Resend__From "
+        "tidak terinject. Cek scripts/provision-resend-key.sh dan RESEND_FROM.",
+        file=sys.stderr
+    )
+
+    sys.exit(1)
 
 
 print("All required hosted configuration found in web.config.")
@@ -1153,11 +1221,17 @@ safe_keys = [
 
     "TwoFactor__MaxSkipsPerHour",
 
+    "App__FrontendBaseUrl",
 
+    "Email__ReplyTo",
 
+    "Notifications__Enabled",
 
+    "Notifications__OutboxPollSeconds",
 
+    "Notifications__MaxAttempts",
 
+    "Notifications__MaxPerRecipientPerHour",
 
     "Resend__From",
 ]

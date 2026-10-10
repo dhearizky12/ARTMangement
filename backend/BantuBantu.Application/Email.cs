@@ -1,6 +1,6 @@
 namespace BantuBantu.Application;
 
-public record EmailMessage(string To, string Subject, string Html);
+public record EmailMessage(string To, string Subject, string Html, string Text = "", string? IdempotencyKey = null);
 
 /// <summary>
 /// Sends a single email. Implemented by <c>ResendEmailSender</c> outside

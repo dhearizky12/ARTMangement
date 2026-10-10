@@ -11,6 +11,8 @@ namespace BantuBantu.Infrastructure;
 /// Sends mail through the Resend HTTP API using a sending-only key
 /// (permission=sending_access, minted by scripts/provision-resend-key.sh).
 /// The key is read from configuration, never from .env directly and never logged.
+/// Transactional only: no tracking headers are set, so Resend's open/click
+/// tracking stays off for these messages.
 /// </summary>
 public class ResendEmailSender(HttpClient http, IConfiguration configuration, ILogger<ResendEmailSender> logger) : IEmailSender
 {
@@ -29,19 +31,40 @@ public class ResendEmailSender(HttpClient http, IConfiguration configuration, IL
             from,
             to = new[] { message.To },
             subject = message.Subject,
-            html = message.Html
+            html = message.Html,
+            text = message.Text
         });
 
         using var request = new HttpRequestMessage(HttpMethod.Post, "emails");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        if (!string.IsNullOrWhiteSpace(message.IdempotencyKey))
+            request.Headers.TryAddWithoutValidation("Idempotency-Key", message.IdempotencyKey);
         request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
 
-        using var response = await http.SendAsync(request, ct);
-        var body = await response.Content.ReadAsStringAsync(ct);
-
-        if (!response.IsSuccessStatusCode)
-            throw new ProfileException($"Resend menolak email (HTTP {(int)response.StatusCode}) untuk {message.To}: {(body.Length > 300 ? body[..300] : body)}", 502, "EMAIL_SEND_FAILED");
-
-        logger.LogInformation("Email accepted by Resend for recipient {Recipient} (status {Status}).", message.To, (int)response.StatusCode);
+        HttpResponseMessage response;
+        try
+        {
+            response = await http.SendAsync(request, ct);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            throw new TransientEmailException($"Resend tidak terjangkau untuk {message.To}: {ex.GetType().Name}.");
+        }
+        using (response)
+        {
+            var body = await response.Content.ReadAsStringAsync(ct);
+            if (response.IsSuccessStatusCode)
+            {
+                logger.LogInformation("Email accepted by Resend for recipient {Recipient} (status {Status}).", message.To, (int)response.StatusCode);
+                return;
+            }
+            var status = (int)response.StatusCode;
+            var detail = body.Length > 300 ? body[..300] : body;
+            // 429/5xx: retry later. Anything else (invalid address, the
+            // resend.dev sandbox 403, bad key) can never succeed: fail fast.
+            if (status == 429 || status >= 500)
+                throw new TransientEmailException($"Resend menolak sementara email (HTTP {status}) untuk {message.To}: {detail}");
+            throw new PermanentEmailException($"Resend menolak email (HTTP {status}) untuk {message.To}: {detail}");
+        }
     }
 }

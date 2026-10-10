@@ -58,7 +58,7 @@ public sealed class EmailSendingTests
         var config = new ConfigurationManager { ["Resend:ApiKey"] = "k", ["Resend:From"] = "a@example.test" };
         var sender = new ResendEmailSender(http, config, NullLogger<ResendEmailSender>.Instance);
 
-        var error = await Assert.ThrowsAsync<ProfileException>(() => sender.SendAsync(new EmailMessage("user@example.test", "s", "<p>s</p>")));
+        var error = await Assert.ThrowsAsync<PermanentEmailException>(() => sender.SendAsync(new EmailMessage("user@example.test", "s", "<p>s</p>")));
         Assert.Equal("EMAIL_SEND_FAILED", error.Code);
         Assert.Equal(502, error.Status);
     }

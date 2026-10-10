@@ -27,6 +27,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<AuditLogEntry> AuditEntries => Set<AuditLogEntry>();
     public DbSet<TwoFactorChallenge> TwoFactorChallenges => Set<TwoFactorChallenge>();
     public DbSet<TwoFactorAccountState> TwoFactorAccountStates => Set<TwoFactorAccountState>();
+    public DbSet<EmailOutbox> EmailOutboxes => Set<EmailOutbox>();
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.Entity<User>().ToTable("Users");
@@ -100,6 +101,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<TwoFactorChallenge>().HasIndex(x => new { x.AccountId, x.Requirement });
         b.Entity<TwoFactorAccountState>().HasKey(x => x.AccountId);
         b.Entity<TwoFactorAccountState>().Property(x => x.Role).HasConversion<string>();
+        b.Entity<EmailOutbox>().Property(x => x.Status).HasConversion<string>();
+        b.Entity<EmailOutbox>().HasIndex(x => x.DedupeKey).IsUnique();
+        b.Entity<EmailOutbox>().HasIndex(x => new { x.Status, x.NextAttemptAt });
     }
 }
 public class AuthRepository(AppDbContext db) : IAuthRepository

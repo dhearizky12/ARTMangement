@@ -62,6 +62,14 @@ jobs:
             - name: Build (Release)
               run: dotnet build backend/BantuBantu.sln -c Release --no-restore
 
+            - name: Create notification test database
+              run: |
+                  set -euo pipefail
+                  PGPASSWORD=bantubantu-ci psql -h 127.0.0.1 -U bantubantu -d bantubantu_test \
+                    -c "SELECT 1 FROM pg_database WHERE datname = 'bantubantu_notify_test'" -tA | grep -q 1 \
+                    || PGPASSWORD=bantubantu-ci psql -h 127.0.0.1 -U bantubantu -d bantubantu_test \
+                      -c "CREATE DATABASE bantubantu_notify_test"
+
             - name: Test
               env:
                   # AuthFactory requires BANTUBANTU_TEST_DB and uses it as the
@@ -69,14 +77,18 @@ jobs:
                   # database. sslmode=disable is required because the URI
                   # resolver defaults to SslMode.Require and the throwaway
                   # container has no TLS.
-                  BANTUBANTU_TEST_DB: postgresql://bantubantu:bantubantu-ci@127.0.0.1:5432/bantubantu_test?sslmode=disable
                   #
                   # TwoFactorAuthFactory prefers a dedicated BANTUBANTU_2FA_TEST_DB
                   # but falls back to the throwaway database when unset: the 2FA
                   # test factory migrates its own schema and never rolls it back.
                   #
+                  # NotificationTests migrate and seed heavily, so they use a
+                  # dedicated BANTUBANTU_NOTIFICATION_TEST_DB created above.
+                  # Sharing one physical database with the auth/2FA tests
+                  # flakes both ways (concurrent migrates, shared admin rows).
                   BANTUBANTU_TEST_DB: postgresql://bantubantu:bantubantu-ci@127.0.0.1:5432/bantubantu_test?sslmode=disable
                   BANTUBANTU_2FA_TEST_DB: postgresql://bantubantu:bantubantu-ci@127.0.0.1:5432/bantubantu_test?sslmode=disable
+                  BANTUBANTU_NOTIFICATION_TEST_DB: postgresql://bantubantu:bantubantu-ci@127.0.0.1:5432/bantubantu_notify_test?sslmode=disable
               run: |
                   # Guard: tests must never see an ambient database setting.
                   test -z "${DATABASE_URL:-}"
