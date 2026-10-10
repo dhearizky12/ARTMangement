@@ -31,10 +31,13 @@ public class MarketplaceRepository(AppDbContext db, IProviderScope scope) : IMar
         var items = await query.OrderByDescending(p => p.Reviews.Where(r => !r.IsHidden).Select(r => (double?)r.Rating).Average() ?? 0).ThenBy(p => p.Id).Skip((page - 1) * pageSize).Take(pageSize).Select(ProviderProjections.Public).ToListAsync(ct);
         return (count, items);
     }
-    // Tracked on purpose: OrderService.Book() reuses the returned provider as a
-    // navigation on a new Order, so the instance must already be tracked.
-    public Task<Provider?> PublicProviderAsync(Guid id, CancellationToken ct) => Details(Published()).SingleOrDefaultAsync(p => p.Id == id, ct);
     public Task<ProviderDto?> PublicProviderReadAsync(Guid id, CancellationToken ct) => Published().AsNoTracking().Where(p => p.Id == id).Select(ProviderProjections.Public).SingleOrDefaultAsync(ct);
+    // Single-query projection: booking only needs price, name and available days,
+    // so it never materialises the provider's collections or related graph.
+    public Task<BookingProvider?> BookingProviderAsync(Guid id, CancellationToken ct) => Published().AsNoTracking()
+        .Where(p => p.Id == id)
+        .Select(p => new BookingProvider(p.Id, p.FullName, p.Price, p.PricingType, p.Availability.Where(a => a.IsAvailable).Select(a => a.DayOfWeek).ToArray()))
+        .SingleOrDefaultAsync(ct);
     public Task<List<Provider>> AdminProvidersAsync(Actor actor, CancellationToken ct) => Details(scope.Apply(db.Providers, actor)).AsNoTracking().OrderByDescending(p => p.CreatedAt).Take(200).ToListAsync(ct);
     public Task<List<Provider>> AdminVerificationQueueAsync(Actor actor, CancellationToken ct) => Details(scope.Apply(db.Providers, actor).Where(p => p.ApplicationStatus == ProviderApplicationStatus.Submitted && p.VerificationStatus == VerificationStatus.Pending)).AsNoTracking().OrderByDescending(p => p.SubmittedAt).ToListAsync(ct);
     public Task<Provider?> AdminProviderAsync(Actor actor, Guid id, CancellationToken ct) => Details(scope.Apply(db.Providers, actor)).SingleOrDefaultAsync(p => p.Id == id, ct);
