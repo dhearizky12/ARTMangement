@@ -5,6 +5,7 @@ using BantuBantu.Infrastructure;
 using BantuBantu.Domain;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using BantuBantu.Api;
@@ -97,6 +98,12 @@ builder.Services.AddScoped<IProviderScope, ProviderScope>();
 builder.Services.AddScoped<IMarketplaceRepository, MarketplaceRepository>();
 builder.Services.AddMemoryCache(o => o.SizeLimit = 512);
 builder.Services.AddSingleton<IReadCache, MemoryReadCache>();
+builder.Services.AddResponseCompression(o =>
+{
+    o.EnableForHttps = true;
+    o.Providers.Add<BrotliCompressionProvider>();
+    o.Providers.Add<GzipCompressionProvider>();
+});
 builder.Services.AddScoped<ProviderService>();
 builder.Services.AddScoped<AgencyService>();
 builder.Services.AddScoped<CatalogService>();
@@ -254,6 +261,8 @@ app.Use(async (context, next) =>
     }
 });
 app.UseMiddleware<ServerTimingMiddleware>();
+app.UseResponseCompression();
+app.UseMiddleware<PublicCacheMiddleware>();
 app.UseCors();
 app.UseRateLimiter();
 app.UseAuthentication();
