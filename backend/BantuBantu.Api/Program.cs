@@ -8,12 +8,14 @@ using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using BantuBantu.Api;
+using BantuBantu.Api.Diagnostics;
 using BantuBantu.Infrastructure.Notifications;
 var builder = WebApplication.CreateBuilder(args);
 var seedMode = args.Contains("--seed-admin") || args.Contains("--seed-accounts");
 var databaseConnection = new DatabaseConnectionStringResolver().Resolve(builder.Configuration);
 var originPolicy = seedMode ? null : AllowedOriginPolicy.FromConfiguration(builder.Configuration);
 var twoFactor = TwoFactorSettingsFactory.FromConfiguration(builder.Configuration);
+var diagnostics = DiagnosticsSettings.FromConfiguration(builder.Configuration);
 var (notifications, appSettings, emailSettings) = NotificationSettingsFactory.FromConfiguration(builder.Configuration);
 var storageProvider = (builder.Configuration["Storage:Provider"] ?? "Local").Trim();
 if (!seedMode)
@@ -87,6 +89,9 @@ builder.Services.AddProblemDetails(o => o.CustomizeProblemDetails = context =>
     context.HttpContext.Response.Headers["X-Correlation-ID"] = traceId;
 });
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton(diagnostics);
+builder.Services.AddScoped<RequestDbMetrics>();
+builder.Services.AddSingleton<DbMetricsInterceptor>();
 builder.Services.AddScoped<ICurrentActor, CurrentActor>();
 builder.Services.AddScoped<IProviderScope, ProviderScope>();
 builder.Services.AddScoped<IMarketplaceRepository, MarketplaceRepository>();
@@ -95,11 +100,12 @@ builder.Services.AddScoped<AgencyService>();
 builder.Services.AddScoped<CatalogService>();
 builder.Services.AddScoped<ReviewService>();
 builder.Services.AddScoped<OrderService>();
-builder.Services.AddDbContext<AppDbContext>(o => o.UseNpgsql(databaseConnection, npgsql =>
+builder.Services.AddDbContext<AppDbContext>((serviceProvider, o) => o.UseNpgsql(databaseConnection, npgsql =>
     npgsql.EnableRetryOnFailure(
         maxRetryCount: 3,
         maxRetryDelay: TimeSpan.FromSeconds(5),
-        errorCodesToAdd: null)));
+        errorCodesToAdd: null))
+    .AddInterceptors(serviceProvider.GetRequiredService<DbMetricsInterceptor>()));
 builder.Services.AddScoped<IAuthRepository, AuthRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddSingleton<IGoogleIdentityVerifier, GoogleIdentityVerifier>();
@@ -245,6 +251,7 @@ app.Use(async (context, next) =>
         await context.Response.WriteAsJsonAsync(new { title = "Akun sedang diproses atau sudah terdaftar. Coba login kembali.", status = 409, traceId });
     }
 });
+app.UseMiddleware<ServerTimingMiddleware>();
 app.UseCors();
 app.UseRateLimiter();
 app.UseAuthentication();

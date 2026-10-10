@@ -536,8 +536,18 @@ export Notifications__OutboxPollSeconds="${NOTIFICATIONS_OUTBOX_POLL_SECONDS:-30
 export Notifications__MaxAttempts="${NOTIFICATIONS_MAX_ATTEMPTS:-6}"
 
 export Notifications__MaxPerRecipientPerHour="${NOTIFICATIONS_MAX_PER_RECIPIENT_PER_HOUR:-10}"
-
 export Notifications__OpportunisticTimeoutSeconds="${NOTIFICATIONS_OPPORTUNISTIC_TIMEOUT_SECONDS:-2}"
+
+
+# ------------------------------------------------------------
+# Diagnostics
+#
+# Diagnostics__ServerTiming emits a Server-Timing header (db_ms, sql_count,
+# total_ms) on every response. Off by default; turn it on only for a deliberate
+# latency probe because it exposes per-request database timing to any client.
+# ------------------------------------------------------------
+
+export Diagnostics__ServerTiming="${DIAGNOSTICS_SERVER_TIMING:-false}"
 
 
 # ------------------------------------------------------------
