@@ -111,6 +111,7 @@ builder.Services.AddSingleton(emailSettings);
 builder.Services.AddScoped<INotificationOutbox, NotificationOutbox>();
 builder.Services.AddScoped<INotificationData, NotificationData>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddSingleton<INotificationRenderer, NotificationRenderer>();
 builder.Services.AddHostedService<EmailOutboxWorker>();
 builder.Services.AddSingleton<IEmailOtpService, EmailOtpService>();
 if (originPolicy is null)
@@ -142,6 +143,22 @@ if (args.Contains("--seed-admin"))
     var user = new AdminAccount { Email = email, FullName = "Administrator", Role = UserRole.PlatformAdmin, ProfileCompleted = true };
     user.PasswordHash = scope.ServiceProvider.GetRequiredService<IPasswordService>().Hash(user, password);
     repository.AddUser(user); await repository.SaveAsync(default); return;
+}
+if (args.Contains("--preview-mail"))
+{
+    if (!app.Environment.IsDevelopment()) throw new InvalidOperationException("--preview-mail is Development-only.");
+    using var scope = app.Services.CreateScope();
+    var renderer = scope.ServiceProvider.GetRequiredService<INotificationRenderer>();
+    var dir = Path.Combine(app.Environment.ContentRootPath, "App_Data", "mail-preview");
+    Directory.CreateDirectory(dir);
+    foreach (var (templateKey, payloadJson) in renderer.PreviewSamples())
+    {
+        var rendered = renderer.Render(templateKey, System.Text.Json.JsonDocument.Parse(payloadJson).RootElement);
+        var file = Path.Combine(dir, templateKey + ".html");
+        await File.WriteAllTextAsync(file, rendered.Html);
+        Console.WriteLine($"preview: {templateKey} -> {file} [{rendered.Subject}]");
+    }
+    return;
 }
 if (args.Contains("--seed-accounts"))
 {

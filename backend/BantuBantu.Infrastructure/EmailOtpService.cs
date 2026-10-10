@@ -1,7 +1,9 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using BantuBantu.Application;
+using BantuBantu.Infrastructure.Notifications;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -20,12 +22,14 @@ public class EmailOtpService : IEmailOtpService
     private static readonly byte[] Info = Encoding.UTF8.GetBytes("email-otp-code-hmac");
     private readonly byte[] key;
     private readonly IEmailSender sender;
+    private readonly INotificationRenderer renderer;
     private readonly IConfiguration config;
     private readonly ILogger<EmailOtpService> logger;
 
-    public EmailOtpService(RsaKeys keys, IEmailSender sender, IConfiguration config, ILogger<EmailOtpService> logger)
+    public EmailOtpService(RsaKeys keys, IEmailSender sender, INotificationRenderer renderer, IConfiguration config, ILogger<EmailOtpService> logger)
     {
         this.sender = sender;
+        this.renderer = renderer;
         this.config = config;
         this.logger = logger;
         key = HKDF.DeriveKey(HashAlgorithmName.SHA256, keys.PrivateKeyMaterial, 32, Salt, Info);
@@ -56,13 +60,7 @@ public class EmailOtpService : IEmailOtpService
             logger.LogWarning("2FA kode untuk {To} (hanya pengembangan): {Code}", to, code);
             return;
         }
-        var html =
-            "<p>Halo,</p>" +
-            "<p>Gunakan kode berikut untuk masuk ke akun Bantu-Bantu:</p>" +
-            $"<p style=\"font-size:2rem;letter-spacing:.5rem;font-weight:700;\">{code}</p>" +
-            $"<p>Berlaku {ttlMinutes} menit.</p>" +
-            "<p>Jangan bagikan kode ini kepada siapa pun.</p>" +
-            "<p>Abaikan email ini jika bukan Anda yang memintanya.</p>";
-        await sender.SendAsync(new EmailMessage(to, "Kode masuk Bantu-Bantu", html), ct);
+        var rendered = renderer.Render(NotificationTemplates.AuthOtp, JsonDocument.Parse(NotificationJson.Serialize(new OtpMailPayload(code, ttlMinutes))).RootElement);
+        await sender.SendAsync(new EmailMessage(to, rendered.Subject, rendered.Html, rendered.Text), ct);
     }
 }

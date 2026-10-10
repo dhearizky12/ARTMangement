@@ -1,7 +1,9 @@
 using System.Security.Cryptography;
 using BantuBantu.Application;
 using BantuBantu.Infrastructure;
+using BantuBantu.Infrastructure.Notifications;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace BantuBantu.Tests;
 
@@ -63,7 +65,7 @@ public sealed class EmailOtpServiceTests
         Assert.Equal("a@example.test", sender.Last?.To);
     }
 
-    private static EmailOtpService NewOtp(IConfiguration config, IEmailSender sender)
+    private static EmailOtpService NewOtp(IConfiguration config, IEmailSender sender, ILogger<EmailOtpService>? logger = null)
     {
         using var rsa = RSA.Create(2048);
         var directory = Path.Combine(Path.GetTempPath(), "bantubantu-otp-" + Guid.NewGuid());
@@ -77,7 +79,7 @@ public sealed class EmailOtpServiceTests
             ["Jwt:PublicKeyPath"] = publicPath,
             ["Jwt:KeyId"] = "test"
         });
-        return new EmailOtpService(keys, sender, config, NullLogger<EmailOtpService>.Instance);
+        return new EmailOtpService(keys, sender, new NotificationRenderer(new AppSettings { FrontendBaseUrl = "http://localhost:5173" }, new EmailSettings()), config, logger ?? NullLogger<EmailOtpService>.Instance);
     }
 
     private sealed class RecordingSender : IEmailSender
