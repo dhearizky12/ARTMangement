@@ -34,6 +34,7 @@ public class MarketplaceRepository(AppDbContext db, IProviderScope scope) : IMar
     // Tracked on purpose: OrderService.Book() reuses the returned provider as a
     // navigation on a new Order, so the instance must already be tracked.
     public Task<Provider?> PublicProviderAsync(Guid id, CancellationToken ct) => Details(Published()).SingleOrDefaultAsync(p => p.Id == id, ct);
+    public Task<ProviderDto?> PublicProviderReadAsync(Guid id, CancellationToken ct) => Published().AsNoTracking().Where(p => p.Id == id).Select(ProviderProjections.Public).SingleOrDefaultAsync(ct);
     public Task<List<Provider>> AdminProvidersAsync(Actor actor, CancellationToken ct) => Details(scope.Apply(db.Providers, actor)).AsNoTracking().OrderByDescending(p => p.CreatedAt).Take(200).ToListAsync(ct);
     public Task<List<Provider>> AdminVerificationQueueAsync(Actor actor, CancellationToken ct) => Details(scope.Apply(db.Providers, actor).Where(p => p.ApplicationStatus == ProviderApplicationStatus.Submitted && p.VerificationStatus == VerificationStatus.Pending)).AsNoTracking().OrderByDescending(p => p.SubmittedAt).ToListAsync(ct);
     public Task<Provider?> AdminProviderAsync(Actor actor, Guid id, CancellationToken ct) => Details(scope.Apply(db.Providers, actor)).SingleOrDefaultAsync(p => p.Id == id, ct);

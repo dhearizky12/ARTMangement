@@ -26,7 +26,7 @@ public class ProviderService(IMarketplaceRepository repo, ICurrentActor current,
     }
     private static ProviderAdminDto AdminMap(Provider p) => new(Map(p), Step(p), p.VillageId, p.AddressDetail, p.PostalCode, p.Documents.Select(d => new ProviderDocumentDto(d.Id, d.DocumentType, d.UploadedAt)).ToArray());
     public async Task<ProviderPage> Browse(string? q, Guid? category, string? villageId, int page, int size, CancellationToken ct) { page = Math.Clamp(page, 1, 10000); size = Math.Clamp(size, 1, 20); var result = await repo.BrowseAsync(q, category, villageId, page, size, ct); return new(result.Total, page, size, result.Items.ToArray()); }
-    public async Task<ProviderDto> Detail(Guid id, CancellationToken ct) => Map(await repo.PublicProviderAsync(id, ct) ?? throw new ProfileException("Penyedia tidak ditemukan.", 404));
+    public async Task<ProviderDto> Detail(Guid id, CancellationToken ct) => await repo.PublicProviderReadAsync(id, ct) ?? throw new ProfileException("Penyedia tidak ditemukan.", 404);
     public async Task<ProviderAdminDto[]> Roster(CancellationToken ct) => (await repo.AdminProvidersAsync(Admin(), ct)).Select(AdminMap).ToArray();
     public async Task<ProviderAdminDto[]> Applications(ProviderApplicationStatus? status, CancellationToken ct)
     {

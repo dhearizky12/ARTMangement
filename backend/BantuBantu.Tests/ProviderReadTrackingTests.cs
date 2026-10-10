@@ -30,9 +30,11 @@ public class ProviderReadTrackingTests
         await repo.OrdersAsync(Customer, default);
         await repo.AdminReviewsAsync(Platform, default);
         var browse = await repo.BrowseAsync(null, null, null, 1, 50, default);
+        var detail = await repo.PublicProviderReadAsync(ProviderBrowseContractTests.ProviderId, default);
 
         Assert.Contains(roster, p => p.Id == ProviderBrowseContractTests.ProviderId);
         Assert.Contains(browse.Items, p => p.Id == ProviderBrowseContractTests.ProviderId);
+        Assert.Equal(ProviderBrowseContractTests.ProviderId, detail!.Id);
         Assert.DoesNotContain(db.ChangeTracker.Entries(), e => e.Entity is Provider or Order or Review);
     }
 
@@ -53,5 +55,9 @@ public class ProviderReadTrackingTests
         response.EnsureSuccessStatusCode();
         var count = ProviderBrowseContractTests.SqlCount(response);
         Assert.InRange(count, 1, 3);
+
+        var detail = await client.GetAsync($"/api/providers/{ProviderBrowseContractTests.ProviderId}");
+        detail.EnsureSuccessStatusCode();
+        Assert.InRange(ProviderBrowseContractTests.SqlCount(detail), 1, 3);
     }
 }
