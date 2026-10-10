@@ -7,10 +7,15 @@ namespace BantuBantu.Api.Controllers;
 [ApiController, Route("api/auth"), EnableRateLimiting("auth")]
 public class AuthController(IAuthService auth) : ControllerBase
 {
-    private ActionResult<AuthResponse> Respond(AuthResult result)
+    private ActionResult<AuthResponse> Respond(AuthOutcome outcome)
     {
         Response.Headers.CacheControl = "no-store";
-        return Ok(result.Response);
+        return outcome switch
+        {
+            SessionOutcome s => Ok(s.Response),
+            ChallengeOutcome c => Ok(c.Challenge),
+            _ => throw new InvalidOperationException("Unknown auth outcome.")
+        };
     }
     [HttpPost("google")]
     public async Task<ActionResult<AuthResponse>> Google(GoogleRequest request, CancellationToken ct) => Respond(await auth.GoogleAsync(request.Credential, ct));
@@ -24,7 +29,13 @@ public class AuthController(IAuthService auth) : ControllerBase
     public async Task<ActionResult<AuthResponse>> Refresh(RefreshRequest request, CancellationToken ct) => Respond(await auth.RefreshAsync(request.RefreshToken, ct));
     [HttpPost("logout")]
     public async Task<IActionResult> Logout(RefreshRequest request, CancellationToken ct) { await auth.LogoutAsync(request.RefreshToken, ct); return NoContent(); }
-    [Authorize(Roles = "Provider"), HttpPost("provider/change-password")]
+    [HttpPost("2fa/verify"), EnableRateLimiting("2fa")]
+    public async Task<ActionResult<AuthResponse>> VerifyTwoFactor(TwoFactorVerifyRequest request, CancellationToken ct) => Respond(await auth.VerifyTwoFactorCodeAsync(request.ChallengeId, request.Code, ct));
+    [HttpPost("2fa/resend"), EnableRateLimiting("2fa")]
+    public async Task<IActionResult> ResendTwoFactor(TwoFactorResendRequest request, CancellationToken ct) { await auth.ResendTwoFactorCodeAsync(request.ChallengeId, ct); return NoContent(); }
+    [HttpPost("2fa/skip"), EnableRateLimiting("2fa")]
+    public async Task<ActionResult<AuthResponse>> SkipTwoFactor(TwoFactorSkipRequest request, CancellationToken ct) => Respond(await auth.SkipTwoFactorAsync(request.ChallengeId, ct));
+    [Authorize(Roles = "Provider"), RequireMfa, HttpPost("provider/change-password")]
     public async Task<IActionResult> ChangeProviderPassword(ChangePasswordRequest request, CancellationToken ct)
     {
         if (!Guid.TryParse(User.FindFirst("providerId")?.Value, out var providerId)) return Unauthorized();

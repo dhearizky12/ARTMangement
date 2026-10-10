@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 namespace BantuBantu.Api.Controllers;
 
-[ApiController, Route("api/admin"), Authorize(Roles = "PlatformAdmin,AgencyAdmin")]
+[ApiController, Route("api/admin"), Authorize(Roles = "PlatformAdmin,AgencyAdmin"), RequireMfa]
 public class AdminMarketplaceController(ProviderService providers, AgencyService agencies, CatalogService catalog, OrderService orders, ReviewService reviews) : ControllerBase
 {
     [HttpGet("providers")] public Task<ProviderAdminDto[]> Providers(CancellationToken ct) => providers.Roster(ct);

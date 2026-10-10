@@ -63,6 +63,7 @@ public class ProviderCredential
     public string Email { get; set; } = "";
     public string PasswordHash { get; set; } = "";
     public DateTimeOffset PasswordChangedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? EmailVerifiedAt { get; set; }
 }
 public class ProviderRefreshSession
 {
@@ -72,6 +73,7 @@ public class ProviderRefreshSession
     public string TokenHash { get; set; } = "";
     public DateTimeOffset ExpiresAt { get; set; }
     public DateTimeOffset? RevokedAt { get; set; }
+    public SessionAccess? Level { get; set; }
 }
 public class ProviderCategory { public Guid ProviderId { get; set; } public Provider Provider { get; set; } = null!; public Guid ServiceCategoryId { get; set; } public ServiceCategory ServiceCategory { get; set; } = null!; }
 public class ProviderSkill { public Guid ProviderId { get; set; } public Provider Provider { get; set; } = null!; public string SkillName { get; set; } = ""; }

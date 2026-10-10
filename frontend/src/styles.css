@@ -442,6 +442,23 @@ form .btn {
 .text-link:hover {
   text-decoration: underline;
 }
+button.text-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--color-primary);
+  text-decoration: none;
+  cursor: pointer;
+}
+button.text-link:hover {
+  text-decoration: underline;
+}
+button.text-link:disabled {
+  color: var(--color-muted);
+  cursor: default;
+  text-decoration: none;
+}
 .search-field {
   position: relative;
 }
@@ -1022,6 +1039,37 @@ dd {
 }
 .trust-banner span {
   flex: 1;
+}
+.step-up-banner {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  margin: var(--space-4) 0;
+  background: var(--color-accent);
+  color: var(--color-accent-ink);
+  border: var(--border-width) solid var(--color-ink);
+  border-radius: var(--radius);
+}
+.step-up-banner p {
+  margin: 0;
+}
+.step-up-banner .btn {
+  align-self: flex-start;
+}
+@media (min-width: 560px) {
+  .step-up-banner {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .step-up-banner > div {
+    flex: 1;
+  }
+  .step-up-banner .btn {
+    align-self: center;
+  }
 }
 .provider-grid,
 .admin-grid {

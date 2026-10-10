@@ -482,6 +482,9 @@ namespace BantuBantu.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTimeOffset?>("EmailVerifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTimeOffset>("PasswordChangedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -547,6 +550,9 @@ namespace BantuBantu.Infrastructure.Migrations
                     b.Property<DateTimeOffset>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("Level")
+                        .HasColumnType("integer");
+
                     b.Property<Guid>("ProviderId")
                         .HasColumnType("uuid");
 
@@ -603,6 +609,9 @@ namespace BantuBantu.Infrastructure.Migrations
 
                     b.Property<DateTimeOffset>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("Level")
+                        .HasColumnType("integer");
 
                     b.Property<DateTimeOffset?>("RevokedAt")
                         .HasColumnType("timestamp with time zone");
@@ -780,6 +789,96 @@ namespace BantuBantu.Infrastructure.Migrations
                             Slug = "perawatan-taman",
                             SortOrder = 4
                         });
+                });
+
+            modelBuilder.Entity("BantuBantu.Domain.TwoFactorAccountState", b =>
+                {
+                    b.Property<Guid>("AccountId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ResendWindowStart")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("ResendsInWindow")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("SkipWindowStart")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("SkipsInWindow")
+                        .HasColumnType("integer");
+
+                    b.HasKey("AccountId");
+
+                    b.ToTable("TwoFactorAccountStates");
+                });
+
+            modelBuilder.Entity("BantuBantu.Domain.TwoFactorChallenge", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CodeHash")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("InvalidatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("LockedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MaskedEmail")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("MaxAttempts")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Requirement")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("ResentAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("SessionJti")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("VerifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccountId", "Requirement");
+
+                    b.ToTable("TwoFactorChallenges");
                 });
 
             modelBuilder.Entity("BantuBantu.Domain.User", b =>

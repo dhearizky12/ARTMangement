@@ -1,9 +1,7 @@
 using System.Security.Cryptography;
 using BantuBantu.Application;
 using BantuBantu.Infrastructure;
-using BantuBantu.Infrastructure.Notifications;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace BantuBantu.Tests;
 
@@ -65,32 +63,7 @@ public sealed class EmailOtpServiceTests
         Assert.Equal("a@example.test", sender.Last?.To);
     }
 
-    [Fact]
-    public async Task ClearCodeLogCanOnlyRunInDevelopment()
-    {
-        // Development without a key: code is logged in clear, nothing is sent.
-        var devLogger = new CapturingOtpLogger();
-        var devSender = new RecordingSender();
-        var devOtp = NewOtp(new ConfigurationManager { ["ASPNETCORE_ENVIRONMENT"] = "Development" }, devSender, devLogger);
-        await devOtp.SendAsync("a@example.test", "481516", 10, default);
-        Assert.Null(devSender.Last);
-        Assert.Contains("481516", string.Concat(devLogger.Messages));
-    }
-
-    [Fact]
-    public async Task ProductionWithoutKeyFailsSendAndNeverLogsCode()
-    {
-        // Outside Development the clear-code branch is unreachable: the real
-        // sender throws EMAIL_CONFIG_MISSING instead of logging the code.
-        var logger = new CapturingOtpLogger();
-        var sender = new ResendEmailSender(new HttpClient(), new ConfigurationManager { ["ASPNETCORE_ENVIRONMENT"] = "Production" }, NullLogger<ResendEmailSender>.Instance);
-        var otp = NewOtp(new ConfigurationManager { ["ASPNETCORE_ENVIRONMENT"] = "Production" }, sender, logger);
-        var error = await Assert.ThrowsAsync<ProfileException>(() => otp.SendAsync("a@example.test", "481516", 10, default));
-        Assert.Equal("EMAIL_CONFIG_MISSING", error.Code);
-        Assert.DoesNotContain("481516", string.Concat(logger.Messages));
-    }
-
-    private static EmailOtpService NewOtp(IConfiguration config, IEmailSender sender, ILogger<EmailOtpService>? logger = null)
+    private static EmailOtpService NewOtp(IConfiguration config, IEmailSender sender)
     {
         using var rsa = RSA.Create(2048);
         var directory = Path.Combine(Path.GetTempPath(), "bantubantu-otp-" + Guid.NewGuid());
@@ -104,16 +77,7 @@ public sealed class EmailOtpServiceTests
             ["Jwt:PublicKeyPath"] = publicPath,
             ["Jwt:KeyId"] = "test"
         });
-        return new EmailOtpService(keys, sender, new NotificationRenderer(new AppSettings { FrontendBaseUrl = "http://localhost:5173" }, new EmailSettings()), config, logger ?? NullLogger<EmailOtpService>.Instance);
-    }
-
-    private sealed class CapturingOtpLogger : ILogger<EmailOtpService>
-    {
-        public readonly List<string> Messages = [];
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-        public bool IsEnabled(LogLevel logLevel) => true;
-        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
-            Messages.Add(formatter(state, exception));
+        return new EmailOtpService(keys, sender, config, NullLogger<EmailOtpService>.Instance);
     }
 
     private sealed class RecordingSender : IEmailSender

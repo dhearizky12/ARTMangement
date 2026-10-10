@@ -102,7 +102,7 @@ public partial class AuthIntegrationTests
         await Assert.ThrowsAsync<AuthenticationFailedException>(() => new GoogleIdentityVerifier(config).VerifyAsync("not.a.valid-token"));
     }
 }
-public sealed class AuthFactory : WebApplicationFactory<Program>
+public class AuthFactory : WebApplicationFactory<Program>
 {
     public const string Origin = "http://localhost:5173";
     private readonly string directory = Path.Combine(Path.GetTempPath(), "bantubantu-tests-" + Guid.NewGuid());

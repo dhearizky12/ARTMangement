@@ -31,10 +31,21 @@ jobs:
             # Resend (sending key stays out of job env; see the restore step below)
             RESEND_FROM: ${{ secrets.RESEND_FROM }}
             EMAIL_VERIFICATION_ENABLED: ${{ vars.EMAIL_VERIFICATION_ENABLED }}
+            # 2FA email-code settings (staging repo variables; runtime defaults
+            # apply when unset). Enabling 2FA requires RESEND_FROM + the
+            # sending-only key, enforced by deploy-be.sh and Program.cs.
+            TWO_FACTOR_ENABLED: ${{ vars.TWO_FACTOR_ENABLED }}
+            TWO_FACTOR_PROVIDER_PASSWORD_FALLBACK: ${{ vars.TWO_FACTOR_PROVIDER_PASSWORD_FALLBACK }}
+            TWO_FACTOR_CODE_TTL_MINUTES: ${{ vars.TWO_FACTOR_CODE_TTL_MINUTES }}
+            TWO_FACTOR_MAX_ATTEMPTS: ${{ vars.TWO_FACTOR_MAX_ATTEMPTS }}
+            TWO_FACTOR_RESEND_COOLDOWN_SECONDS: ${{ vars.TWO_FACTOR_RESEND_COOLDOWN_SECONDS }}
+            TWO_FACTOR_MAX_RESENDS_PER_HOUR: ${{ vars.TWO_FACTOR_MAX_RESENDS_PER_HOUR }}
+            TWO_FACTOR_MAX_SKIPS_PER_HOUR: ${{ vars.TWO_FACTOR_MAX_SKIPS_PER_HOUR }}
             # Transactional notification outbox (staging repo variables;
             # runtime defaults apply when unset). Enabling Notifications
             # requires RESEND_FROM + the sending-only key for Notifications,
             # enforced by deploy-be.sh and Program.cs. Links for Notifications
+            # default to FRONTEND_ORIGIN.
             APP_FRONTEND_BASE_URL: ${{ vars.APP_FRONTEND_BASE_URL }}
             EMAIL_REPLY_TO: ${{ vars.EMAIL_REPLY_TO }}
             NOTIFICATIONS_ENABLED: ${{ vars.NOTIFICATIONS_ENABLED }}
@@ -95,6 +106,13 @@ jobs:
                   write_env MONSTERASP_FTP_PASSWORD "$MONSTERASP_FTP_PASSWORD" >> .env
                   write_env RESEND_FROM "${RESEND_FROM:-}" >> .env
                   write_env EMAIL_VERIFICATION_ENABLED "${EMAIL_VERIFICATION_ENABLED:-false}" >> .env
+                  write_env TWO_FACTOR_ENABLED "${TWO_FACTOR_ENABLED:-false}" >> .env
+                  write_env TWO_FACTOR_PROVIDER_PASSWORD_FALLBACK "${TWO_FACTOR_PROVIDER_PASSWORD_FALLBACK:-true}" >> .env
+                  write_env TWO_FACTOR_CODE_TTL_MINUTES "${TWO_FACTOR_CODE_TTL_MINUTES:-10}" >> .env
+                  write_env TWO_FACTOR_MAX_ATTEMPTS "${TWO_FACTOR_MAX_ATTEMPTS:-5}" >> .env
+                  write_env TWO_FACTOR_RESEND_COOLDOWN_SECONDS "${TWO_FACTOR_RESEND_COOLDOWN_SECONDS:-60}" >> .env
+                  write_env TWO_FACTOR_MAX_RESENDS_PER_HOUR "${TWO_FACTOR_MAX_RESENDS_PER_HOUR:-5}" >> .env
+                  write_env TWO_FACTOR_MAX_SKIPS_PER_HOUR "${TWO_FACTOR_MAX_SKIPS_PER_HOUR:-3}" >> .env
                   write_env APP_FRONTEND_BASE_URL "${APP_FRONTEND_BASE_URL:-}" >> .env
                   write_env EMAIL_REPLY_TO "${EMAIL_REPLY_TO:-}" >> .env
                   write_env NOTIFICATIONS_ENABLED "${NOTIFICATIONS_ENABLED:-false}" >> .env
