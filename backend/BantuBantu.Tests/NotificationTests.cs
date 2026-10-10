@@ -30,6 +30,25 @@ public sealed class NotificationTests
         db.Database.Migrate();
         return db;
     }
+    private static AppDbContext NewDbAtMigration(string targetMigration)
+    {
+        var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql(DatabaseConnectionStringResolver.Convert(Connection)).Options);
+        db.Database.Migrate(targetMigration);
+        return db;
+    }
+    private static async Task<bool> TableExistsAsync(AppDbContext db, string table)
+    {
+        using var command = db.Database.GetDbConnection().CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = @t";
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = "@t";
+        parameter.Value = table;
+        command.Parameters.Add(parameter);
+        await db.Database.OpenConnectionAsync();
+        try { return (long)(await command.ExecuteScalarAsync())! > 0; }
+        finally { await db.Database.CloseConnectionAsync(); }
+    }
     private sealed class RecordingSender : IEmailSender
     {
         private readonly object gate = new();
@@ -740,5 +759,111 @@ public sealed class NotificationTests
             Assert.DoesNotContain("old-password-12345", mail.Html);
         }
         finally { await DeleteGraphAsync(harness.Db, tag); harness.Dispose(); }
+    }
+
+    [Fact]
+    public async Task NotificationsDisabled_TouchesNoOutboxTable()
+    {
+        // Deploy safety: with the flag off, the code must work even when the
+        // EmailOutbox table does not exist yet (migration not applied).
+        const string tag = "nb-flagoff";
+        using var db = NewDbAtMigration("20261009125014_AddTwoFactor");
+        try
+        {
+            Assert.False(await TableExistsAsync(db, "EmailOutboxes"));
+            var sender = new RecordingSender();
+            var settings = new NotificationSettings { Enabled = false };
+            var renderer = new NotificationRenderer(new AppSettings { FrontendBaseUrl = "https://app.example.test" }, new EmailSettings());
+            var outbox = new NotificationOutbox(db, settings, renderer, sender, NullLogger<NotificationOutbox>.Instance);
+            var service = new NotificationService(outbox, new NotificationData(db), settings, new TwoFactorSettings(), NullLogger<NotificationService>.Instance);
+            var ct = default(CancellationToken);
+            await SeedAreaAsync(db);
+            var categoryId = await SeedCategoryAsync(db);
+            var customer = new User { Email = $"{tag}-customer@example.test", FullName = "Budi Santoso" };
+            db.Users.Add(customer);
+            var platform = new AdminAccount { Email = $"{tag}-platform@example.test", FullName = "Admin", Role = UserRole.PlatformAdmin };
+            db.Users.Add(platform);
+            var agency = new Agency { Name = $"{tag} Agency", ContactInfo = "c", Status = AgencyStatus.Approved };
+            db.Agencies.Add(agency);
+            await db.SaveChangesAsync();
+            var provider = new Provider { FullName = "Sari Wulandari", ApplicationStatus = ProviderApplicationStatus.Approved, VerificationStatus = VerificationStatus.Verified };
+            provider.Credential = new ProviderCredential { ProviderId = provider.Id, Provider = provider, Email = $"{tag}-provider@example.test", PasswordHash = "x" };
+            provider.Categories.Add(new ProviderCategory { ProviderId = provider.Id, ServiceCategoryId = categoryId });
+            foreach (DayOfWeek day in Enum.GetValues<DayOfWeek>())
+                provider.Availability.Add(new ProviderAvailability { ProviderId = provider.Id, DayOfWeek = day, IsAvailable = true });
+            db.Providers.Add(provider);
+            await db.SaveChangesAsync();
+
+            var repo = new MarketplaceRepository(db, new ProviderScope());
+            var village = new VillageResult(VillageId, "Kelurahan Uji", "Kelurahan", "Kecamatan Uji", "Kabupaten Uji", "Provinsi Uji", "Kelurahan Uji, Kecamatan Uji");
+            var customerSvc = new OrderService(repo, new StaticActor(new Actor(customer.Id, UserRole.Customer, null)), new FakeWilayah(village), service);
+            var booked = await customerSvc.Book(new BookingRequest(provider.Id, DateOnly.FromDateTime(DateTime.UtcNow.AddDays(3)), VillageId, "Jl. Mawar No. 1, RT 01"), ct);
+            var adminSvc = new OrderService(repo, new StaticActor(new Actor(platform.Id, UserRole.PlatformAdmin, null)), new FakeWilayah(village), service);
+            await adminSvc.ChangeOrder(booked.Id, new OrderStatusRequest(OrderStatus.Confirmed), ct);
+            await adminSvc.ChangeOrder(booked.Id, new OrderStatusRequest(OrderStatus.Completed), ct);
+            await customerSvc.Review(booked.Id, new ReviewRequest(5, "Bagus sekali"), ct);
+            var passwords = new PasswordService();
+            var auth = new AuthService(new AuthRepository(db), null!, null!, passwords, null!, new TwoFactorSettings(), service, NullLoggerFactory.Instance);
+            var credential = await db.ProviderCredentials.SingleAsync(x => x.ProviderId == provider.Id);
+            credential.PasswordHash = passwords.HashProvider("old-password-12345");
+            await db.SaveChangesAsync();
+            await auth.ChangeProviderPasswordAsync(provider.Id, "old-password-12345", "new-password-12345", ct);
+            var agencySvc = new AgencyService(repo, new StaticActor(new Actor(platform.Id, UserRole.PlatformAdmin, null)), new AuthRepository(db), null!, service);
+            await agencySvc.Suspend(agency.Id, ct);
+            await agencySvc.Reactivate(agency.Id, ct);
+            // Direct emits are no-ops with the flag off, even for unknown ids.
+            await service.EmitOrderBookedAsync(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), VillageId, "x", ct);
+            await service.EmitApplicationSubmittedAsync(Guid.NewGuid(), 0, ct);
+            await service.DispatchEnqueuedAsync(ct);
+            // The poller also stays away from the table when disabled.
+            var services = WorkerServices(db, sender, renderer);
+            Assert.Equal(0, await EmailOutboxWorker.ProcessBatchAsync(services, settings, ct));
+            Assert.Empty(sender.Sent);
+            Assert.False(await TableExistsAsync(db, "EmailOutboxes"));
+        }
+        finally
+        {
+            // Manual cleanup that never touches EmailOutboxes (absent here),
+            // then migrate back up so later tests see the standard schema.
+            var reviews = await db.Reviews.Where(r => r.Customer.Email.StartsWith(tag + "-")).ToListAsync();
+            db.Reviews.RemoveRange(reviews);
+            var orders = await db.Orders.Where(o => o.Customer.Email.StartsWith(tag + "-")).ToListAsync();
+            db.Orders.RemoveRange(orders);
+            var providers = await db.Providers.Where(p => p.Credential != null && p.Credential.Email.StartsWith(tag + "-")).ToListAsync();
+            db.Providers.RemoveRange(providers);
+            var admins = await db.AdminAccounts.Where(a => a.Email.StartsWith(tag + "-")).ToListAsync();
+            db.AdminAccounts.RemoveRange(admins);
+            var users = await db.Users.Where(u => u.Email.StartsWith(tag + "-")).ToListAsync();
+            db.Users.RemoveRange(users);
+            var agencies = await db.Agencies.Where(a => a.Name.StartsWith(tag + " ")).ToListAsync();
+            db.Agencies.RemoveRange(agencies);
+            await db.SaveChangesAsync();
+            await db.Database.MigrateAsync();
+            db.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task TwoFactorDisabled_TouchesNoTwoFactorTables()
+    {
+        // Deploy safety: with 2FA off, the 2FA endpoints must fail fast (409)
+        // instead of querying tables that may not exist yet.
+        using var db = NewDbAtMigration("20260930051653_ReviewModerationAndTrustCms");
+        try
+        {
+            Assert.False(await TableExistsAsync(db, "TwoFactorChallenges"));
+            Assert.False(await TableExistsAsync(db, "TwoFactorAccountStates"));
+            var auth = new AuthService(new AuthRepository(db), null!, null!, new PasswordService(), null!, new TwoFactorSettings(), null!, NullLoggerFactory.Instance);
+            var ct = default(CancellationToken);
+            var id = Guid.NewGuid();
+            async Task<ProfileException> Fails(Func<Task> call) => await Assert.ThrowsAsync<ProfileException>(call);
+            Assert.Equal("2FA_NOT_ENABLED", (await Fails(() => auth.VerifyTwoFactorCodeAsync(id, "123456", ct))).Code);
+            Assert.Equal("2FA_NOT_ENABLED", (await Fails(() => auth.ResendTwoFactorCodeAsync(id, ct))).Code);
+            Assert.Equal("2FA_NOT_ENABLED", (await Fails(() => auth.SkipTwoFactorAsync(id, ct))).Code);
+            Assert.Equal("2FA_NOT_ENABLED", (await Fails(() => auth.VerifyProviderStepUpAsync(id, "123456", id, "jti", "refresh", ct))).Code);
+            Assert.False(await TableExistsAsync(db, "TwoFactorChallenges"));
+            Assert.False(await TableExistsAsync(db, "TwoFactorAccountStates"));
+        }
+        finally { db.Dispose(); }
     }
 }

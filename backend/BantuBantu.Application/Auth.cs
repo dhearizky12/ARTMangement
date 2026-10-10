@@ -170,6 +170,7 @@ public class AuthService(IAuthRepository repository, IGoogleIdentityVerifier goo
     }
     public async Task<AuthOutcome> VerifyTwoFactorCodeAsync(Guid challengeId, string code, CancellationToken ct)
     {
+        if (!twoFactor.Enabled) throw new ProfileException("Verifikasi dua langkah tidak aktif.", 409, "2FA_NOT_ENABLED");
         var challenge = await repository.FindTwoFactorChallengeAsync(challengeId, ct)
             ?? throw new ProfileException("Kode tidak valid.", 400, "2FA_INVALID");
         if (challenge.Requirement != TwoFactorRequirement.Login) throw new ProfileException("Kode tidak valid.", 400, "2FA_INVALID");
@@ -178,6 +179,7 @@ public class AuthService(IAuthRepository repository, IGoogleIdentityVerifier goo
     }
     public async Task ResendTwoFactorCodeAsync(Guid challengeId, CancellationToken ct)
     {
+        if (!twoFactor.Enabled) throw new ProfileException("Verifikasi dua langkah tidak aktif.", 409, "2FA_NOT_ENABLED");
         var challenge = await repository.FindTwoFactorChallengeAsync(challengeId, ct)
             ?? throw new ProfileException("Kode tidak valid.", 400, "2FA_INVALID");
         if (challenge.Requirement != TwoFactorRequirement.Login) throw new ProfileException("Kode tidak valid.", 400, "2FA_INVALID");
@@ -192,6 +194,7 @@ public class AuthService(IAuthRepository repository, IGoogleIdentityVerifier goo
     }
     public async Task<AuthOutcome> SkipTwoFactorAsync(Guid challengeId, CancellationToken ct)
     {
+        if (!twoFactor.Enabled) throw new ProfileException("Verifikasi dua langkah tidak aktif.", 409, "2FA_NOT_ENABLED");
         var challenge = await repository.FindTwoFactorChallengeAsync(challengeId, ct)
             ?? throw new ProfileException("Kode tidak valid.", 400, "2FA_INVALID");
         if (challenge.Requirement != TwoFactorRequirement.Login || challenge.VerifiedAt is not null
@@ -222,6 +225,7 @@ public class AuthService(IAuthRepository repository, IGoogleIdentityVerifier goo
     }
     public async Task<AuthOutcome> VerifyProviderStepUpAsync(Guid challengeId, string code, Guid providerId, string jti, string refreshToken, CancellationToken ct)
     {
+        if (!twoFactor.Enabled) throw new ProfileException("Verifikasi dua langkah tidak aktif.", 409, "2FA_NOT_ENABLED");
         var challenge = await repository.FindTwoFactorChallengeAsync(challengeId, ct)
             ?? throw new ProfileException("Kode tidak valid.", 400, "2FA_INVALID");
         if (challenge.Requirement != TwoFactorRequirement.StepUp || challenge.Role != UserRole.Provider

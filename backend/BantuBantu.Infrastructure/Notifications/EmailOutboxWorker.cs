@@ -53,6 +53,7 @@ public class EmailOutboxWorker(IServiceScopeFactory scopes, ILogger<EmailOutboxW
     }
     public static async Task<int> ProcessBatchAsync(IServiceProvider services, NotificationSettings settings, CancellationToken ct)
     {
+        if (!settings.Enabled) return 0;
         var db = services.GetRequiredService<AppDbContext>();
         var sender = services.GetRequiredService<IEmailSender>();
         var renderer = services.GetRequiredService<INotificationRenderer>();
