@@ -95,6 +95,8 @@ builder.Services.AddSingleton<DbMetricsInterceptor>();
 builder.Services.AddScoped<ICurrentActor, CurrentActor>();
 builder.Services.AddScoped<IProviderScope, ProviderScope>();
 builder.Services.AddScoped<IMarketplaceRepository, MarketplaceRepository>();
+builder.Services.AddMemoryCache(o => o.SizeLimit = 512);
+builder.Services.AddSingleton<IReadCache, MemoryReadCache>();
 builder.Services.AddScoped<ProviderService>();
 builder.Services.AddScoped<AgencyService>();
 builder.Services.AddScoped<CatalogService>();
