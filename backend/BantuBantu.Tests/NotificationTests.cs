@@ -844,6 +844,30 @@ public sealed class NotificationTests
     }
 
     [Fact]
+    public async Task SendPreviewSendsAllTemplates()
+    {
+        var renderer = new NotificationRenderer(new AppSettings { FrontendBaseUrl = "https://app.example.test" }, new EmailSettings());
+        var sender = new RecordingSender();
+        var sent = await new MailPreviewSender(renderer).SendAllAsync(sender, "Owner@Example.Test ", confirmed: true, isDevelopment: true, default);
+        Assert.Equal(renderer.PreviewSamples().Count, sent.Count);
+        Assert.Equal(renderer.PreviewSamples().Count, sender.Sent.Count);
+        Assert.All(sender.Sent, m => Assert.Equal("owner@example.test", m.To));
+        Assert.Contains(sender.Sent, m => m.Subject == "Kode masuk Bantu-Bantu");
+    }
+
+    [Fact]
+    public async Task SendPreviewRefusesWithoutConfirmInvalidAddressOrProd()
+    {
+        var renderer = new NotificationRenderer(new AppSettings { FrontendBaseUrl = "https://app.example.test" }, new EmailSettings());
+        var preview = new MailPreviewSender(renderer);
+        var sender = new RecordingSender();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => preview.SendAllAsync(sender, "owner@example.test", confirmed: false, isDevelopment: true, default));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => preview.SendAllAsync(sender, "not-an-address", confirmed: true, isDevelopment: true, default));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => preview.SendAllAsync(sender, "owner@example.test", confirmed: true, isDevelopment: false, default));
+        Assert.Empty(sender.Sent);
+    }
+
+    [Fact]
     public async Task TwoFactorDisabled_TouchesNoTwoFactorTables()
     {
         // Deploy safety: with 2FA off, the 2FA endpoints must fail fast (409)

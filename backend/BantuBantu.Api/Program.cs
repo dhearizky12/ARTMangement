@@ -160,6 +160,25 @@ if (args.Contains("--preview-mail"))
     }
     return;
 }
+{
+    var at = Array.IndexOf(args, "--send-preview");
+    if (at >= 0)
+    {
+        // Sends all 17 templates with sample data to one address through the
+        // real Resend sender. Development-only, requires --confirm, and never
+        // runs as part of any other command.
+        var address = at + 1 < args.Length ? args[at + 1] : "";
+        var confirmed = args.Contains("--confirm");
+        if (!app.Environment.IsDevelopment()) throw new InvalidOperationException("--send-preview is Development-only.");
+        using var scope = app.Services.CreateScope();
+        var renderer = scope.ServiceProvider.GetRequiredService<INotificationRenderer>();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<ResendEmailSender>>();
+        var sender = new ResendEmailSender(new HttpClient { BaseAddress = new Uri("https://api.resend.com/") }, builder.Configuration, logger);
+        var sent = await new MailPreviewSender(renderer).SendAllAsync(sender, address, confirmed, isDevelopment: true, default);
+        foreach (var line in sent) Console.WriteLine($"sent preview to {address}: {line}");
+        return;
+    }
+}
 if (args.Contains("--seed-accounts"))
 {
     using var scope = app.Services.CreateScope();
