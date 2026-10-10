@@ -21,19 +21,21 @@ public class MarketplaceRepository(AppDbContext db, IProviderScope scope) : IMar
     // carry it. Category selection/search still requires an active category;
     // publication itself is governed by provider verification and agency state.
     private IQueryable<Provider> Published() => db.Providers.Where(p => p.ApplicationStatus == ProviderApplicationStatus.Approved && p.VerificationStatus == VerificationStatus.Verified && (p.AgencyId == null || p.Agency!.Status == AgencyStatus.Approved));
-    public async Task<(int Total, List<Provider> Items)> BrowseAsync(string? q, Guid? category, string? villageId, int page, int pageSize, CancellationToken ct)
+    public async Task<(int Total, List<ProviderDto> Items)> BrowseAsync(string? q, Guid? category, string? villageId, int page, int pageSize, CancellationToken ct)
     {
         var query = Published().AsNoTracking();
         if (!string.IsNullOrWhiteSpace(q)) { var term = q.Trim().Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_"); query = query.Where(p => EF.Functions.ILike(p.FullName, "%" + term + "%", "\\") || p.Skills.Any(s => EF.Functions.ILike(s.SkillName, "%" + term + "%", "\\"))); }
         if (category.HasValue) query = query.Where(p => p.Categories.Any(c => c.ServiceCategoryId == category && c.ServiceCategory.IsActive));
         if (!string.IsNullOrEmpty(villageId)) query = query.Where(p => p.VillageId == villageId);
         var count = await query.CountAsync(ct);
-        var items = await Details(query.OrderByDescending(p => p.Reviews.Where(r => !r.IsHidden).Select(r => (double?)r.Rating).Average() ?? 0).ThenBy(p => p.Id).Skip((page - 1) * pageSize).Take(pageSize)).ToListAsync(ct);
+        var items = await query.OrderByDescending(p => p.Reviews.Where(r => !r.IsHidden).Select(r => (double?)r.Rating).Average() ?? 0).ThenBy(p => p.Id).Skip((page - 1) * pageSize).Take(pageSize).Select(ProviderProjections.Public).ToListAsync(ct);
         return (count, items);
     }
+    // Tracked on purpose: OrderService.Book() reuses the returned provider as a
+    // navigation on a new Order, so the instance must already be tracked.
     public Task<Provider?> PublicProviderAsync(Guid id, CancellationToken ct) => Details(Published()).SingleOrDefaultAsync(p => p.Id == id, ct);
-    public Task<List<Provider>> AdminProvidersAsync(Actor actor, CancellationToken ct) => Details(scope.Apply(db.Providers, actor)).OrderByDescending(p => p.CreatedAt).Take(200).ToListAsync(ct);
-    public Task<List<Provider>> AdminVerificationQueueAsync(Actor actor, CancellationToken ct) => Details(scope.Apply(db.Providers, actor).Where(p => p.ApplicationStatus == ProviderApplicationStatus.Submitted && p.VerificationStatus == VerificationStatus.Pending)).OrderByDescending(p => p.SubmittedAt).ToListAsync(ct);
+    public Task<List<Provider>> AdminProvidersAsync(Actor actor, CancellationToken ct) => Details(scope.Apply(db.Providers, actor)).AsNoTracking().OrderByDescending(p => p.CreatedAt).Take(200).ToListAsync(ct);
+    public Task<List<Provider>> AdminVerificationQueueAsync(Actor actor, CancellationToken ct) => Details(scope.Apply(db.Providers, actor).Where(p => p.ApplicationStatus == ProviderApplicationStatus.Submitted && p.VerificationStatus == VerificationStatus.Pending)).AsNoTracking().OrderByDescending(p => p.SubmittedAt).ToListAsync(ct);
     public Task<Provider?> AdminProviderAsync(Actor actor, Guid id, CancellationToken ct) => Details(scope.Apply(db.Providers, actor)).SingleOrDefaultAsync(p => p.Id == id, ct);
     public void AddDocument(ProviderDocument document) => db.Set<ProviderDocument>().Add(document);
     public void AddProvider(Provider p) => db.Providers.Add(p);
@@ -53,7 +55,7 @@ public class MarketplaceRepository(AppDbContext db, IProviderScope scope) : IMar
     public void RemoveContent(ContentBlock c) => db.ContentBlocks.Remove(c);
     private IQueryable<Review> ScopedReviews(Actor actor) => db.Reviews.Where(r => scope.Apply(db.Providers, actor).Select(p => p.Id).Contains(r.ProviderId));
     private IQueryable<Review> ReviewDetails(IQueryable<Review> query) => query.Include(r => r.Customer).Include(r => r.Provider).ThenInclude(p => p.Agency);
-    public Task<List<Review>> AdminReviewsAsync(Actor actor, CancellationToken ct) => ReviewDetails(ScopedReviews(actor)).OrderByDescending(r => r.CreatedAt).Take(200).ToListAsync(ct);
+    public Task<List<Review>> AdminReviewsAsync(Actor actor, CancellationToken ct) => ReviewDetails(ScopedReviews(actor)).AsNoTracking().OrderByDescending(r => r.CreatedAt).Take(200).ToListAsync(ct);
     public Task<Review?> AdminReviewAsync(Actor actor, Guid id, CancellationToken ct) => ReviewDetails(ScopedReviews(actor)).SingleOrDefaultAsync(r => r.Id == id, ct);
     private IQueryable<Order> ScopedOrders(Actor actor)
     {
@@ -61,7 +63,7 @@ public class MarketplaceRepository(AppDbContext db, IProviderScope scope) : IMar
         var ids = scope.Apply(db.Providers, actor).Select(p => p.Id);
         return db.Orders.Where(o => ids.Contains(o.ProviderId));
     }
-    public Task<List<Order>> OrdersAsync(Actor actor, CancellationToken ct) => ScopedOrders(actor).Include(o => o.Provider).Include(o => o.Review).OrderByDescending(o => o.CreatedAt).Take(200).ToListAsync(ct);
+    public Task<List<Order>> OrdersAsync(Actor actor, CancellationToken ct) => ScopedOrders(actor).AsNoTracking().Include(o => o.Provider).Include(o => o.Review).OrderByDescending(o => o.CreatedAt).Take(200).ToListAsync(ct);
     public Task<Order?> OrderAsync(Actor actor, Guid id, CancellationToken ct) => ScopedOrders(actor).Include(o => o.Provider).Include(o => o.Review).SingleOrDefaultAsync(o => o.Id == id, ct);
     public void AddOrder(Order o) => db.Orders.Add(o);
     public void AddReview(Review r) => db.Reviews.Add(r);

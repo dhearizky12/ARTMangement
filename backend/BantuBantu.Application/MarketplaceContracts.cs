@@ -33,7 +33,7 @@ public record OrderDto(Guid Id, Guid ProviderId, string ProviderName, OrderStatu
 public record ProviderModerationRequest([StringLength(1000)] string? Note);
 public interface IMarketplaceRepository
 {
-    Task<(int Total, List<Provider> Items)> BrowseAsync(string? q, Guid? category, string? villageId, int page, int pageSize, CancellationToken ct);
+    Task<(int Total, List<ProviderDto> Items)> BrowseAsync(string? q, Guid? category, string? villageId, int page, int pageSize, CancellationToken ct);
     Task<Provider?> PublicProviderAsync(Guid id, CancellationToken ct);
     Task<List<Provider>> AdminProvidersAsync(Actor actor, CancellationToken ct);
     Task<List<Provider>> AdminVerificationQueueAsync(Actor actor, CancellationToken ct);
