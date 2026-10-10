@@ -30,6 +30,9 @@ public sealed class RsaKeys : IDisposable
     private readonly RSA publicRsa = RSA.Create();
     public RsaSecurityKey SigningKey { get; }
     public RsaSecurityKey ValidationKey { get; }
+    /// <summary>PKCS#1 DER bytes of the signing key, used as HKDF input for
+    /// derived keys (e.g. the 2FA email-code HMAC) so no extra secret is needed.</summary>
+    public byte[] PrivateKeyMaterial { get; }
     public RsaKeys(IConfiguration config)
     {
         privateRsa.ImportFromPem(ReadKey(config, "PrivateKey"));
@@ -37,6 +40,7 @@ public sealed class RsaKeys : IDisposable
         if (privateRsa.KeySize < 2048 || !privateRsa.ExportSubjectPublicKeyInfo().SequenceEqual(publicRsa.ExportSubjectPublicKeyInfo())) throw new InvalidOperationException("RSA keys must match and have at least 2048 bits.");
         SigningKey = new(privateRsa) { KeyId = config["Jwt:KeyId"] };
         ValidationKey = new(publicRsa) { KeyId = config["Jwt:KeyId"] };
+        PrivateKeyMaterial = privateRsa.ExportRSAPrivateKey();
     }
     private static string ReadKey(IConfiguration config, string name)
     {
@@ -57,14 +61,16 @@ public sealed class RsaKeys : IDisposable
 public class TokenService(IConfiguration config, RsaKeys keys) : ITokenService
 {
     public int RefreshDays => int.Parse(config["Jwt:RefreshDays"]!);
-    public AccessToken Create(User user) => Create(user.Id, user.Email, user.Role, user.ProfileCompleted, (user as AdminAccount)?.AgencyId, null);
-    public AccessToken Create(Provider provider, string email) => Create(provider.Id, email, UserRole.Provider, true, null, provider.Id);
-    private AccessToken Create(Guid subject, string email, UserRole role, bool profileCompleted, Guid? agencyId, Guid? providerId)
+    public AccessToken Create(User user, SessionAccess? level = null) => Create(user.Id, user.Email, user.Role, user.ProfileCompleted, (user as AdminAccount)?.AgencyId, null, level);
+    public AccessToken Create(Provider provider, string email, SessionAccess? level = null) => Create(provider.Id, email, UserRole.Provider, true, null, provider.Id, level);
+    private AccessToken Create(Guid subject, string email, UserRole role, bool profileCompleted, Guid? agencyId, Guid? providerId, SessionAccess? level)
     {
         var now = DateTimeOffset.UtcNow; var expiry = now.AddMinutes(int.Parse(config["Jwt:AccessMinutes"]!));
         Claim[] claims = [new("sub", subject.ToString()), new("email", email), new("role", role.ToString()), new("profileCompleted", profileCompleted ? "true" : "false"), new("jti", Guid.NewGuid().ToString())];
         if (agencyId is not null) claims = [.. claims, new("agencyId", agencyId.Value.ToString())];
         if (providerId is not null) claims = [.. claims, new("providerId", providerId.Value.ToString())];
+        if (level == SessionAccess.Full) claims = [.. claims, new("amr", "email_otp")];
+        else if (level == SessionAccess.Limited) claims = [.. claims, new("limited", "true")];
         var jwt = new JwtSecurityToken(config["Jwt:Issuer"], config["Jwt:Audience"], claims, now.UtcDateTime, expiry.UtcDateTime, new SigningCredentials(keys.SigningKey, SecurityAlgorithms.RsaSha256));
         return new(new JwtSecurityTokenHandler().WriteToken(jwt), expiry);
     }

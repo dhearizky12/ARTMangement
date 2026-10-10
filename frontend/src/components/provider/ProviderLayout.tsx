@@ -1,16 +1,38 @@
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { LogOut } from "lucide-react";
 import { Brand } from "../Brand";
 import { Button, ConfirmDialog } from "../ui";
-import { authApi } from "../../api/authApi";
+import {
+  authApi,
+  sessionLevel,
+  type Session,
+} from "../../api/authApi";
+import { useAuth } from "../../context/AuthContext";
+import { StepUpDialog } from "./StepUpDialog";
 
 export function ProviderLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
+  const { session } = useAuth();
+  const sessionRef = useRef<Session | null>(session);
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
   const [error, setError] = useState("");
   const [confirmLogout, setConfirmLogout] = useState(false);
+  const [stepUpOpen, setStepUpOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    const onStepUpRequired = () => {
+      const active = sessionRef.current;
+      if (active && sessionLevel(active.accessToken) === "limited")
+        setStepUpOpen(true);
+    };
+    window.addEventListener("step-up-required", onStepUpRequired);
+    return () => window.removeEventListener("step-up-required", onStepUpRequired);
+  }, []);
+  const level = session ? sessionLevel(session.accessToken) : "none";
   async function logout() {
     setBusy(true);
     setError("");
@@ -49,8 +71,21 @@ export function ProviderLayout({ children }: { children: ReactNode }) {
             {error}
           </p>
         )}
+        {level === "limited" && (
+          <div className="step-up-banner" role="note">
+            <div>
+              <strong>Sesi terbatas</strong>
+              <p>
+                Untuk mengirim aplikasi, memperbarui profil, atau mengganti kata
+                sandi, verifikasi email Anda sekali selagi masuk.
+              </p>
+            </div>
+            <Button onClick={() => setStepUpOpen(true)}>Verifikasi email</Button>
+          </div>
+        )}
         {children}
       </main>
+      <StepUpDialog open={stepUpOpen} onOpenChange={setStepUpOpen} />
       <ConfirmDialog
         open={confirmLogout}
         title="Keluar dari akun?"

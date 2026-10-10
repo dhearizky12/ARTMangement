@@ -56,3 +56,17 @@ services:
         sync: false
       - key: Storage__S3__KeyPrefix
         value: provider-documents
+      - key: TwoFactor__Enabled
+        sync: false
+      - key: TwoFactor__ProviderPasswordFallback
+        value: "true"
+      - key: TwoFactor__CodeTtlMinutes
+        value: "10"
+      - key: TwoFactor__MaxAttempts
+        value: "5"
+      - key: TwoFactor__ResendCooldownSeconds
+        value: "60"
+      - key: TwoFactor__MaxResendsPerHour
+        value: "5"
+      - key: TwoFactor__MaxSkipsPerHour
+        value: "3"

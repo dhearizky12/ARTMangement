@@ -31,6 +31,13 @@ x-api: &api
     Frontend__Origins: ${FRONTEND_ORIGINS:-}
     Frontend__OriginPatterns: ${FRONTEND_ORIGIN_PATTERNS:-}
     AllowedHosts: ${ALLOWED_HOSTS:-localhost}
+    TwoFactor__Enabled: ${TWO_FACTOR_ENABLED:-false}
+    TwoFactor__ProviderPasswordFallback: ${TWO_FACTOR_PROVIDER_PASSWORD_FALLBACK:-true}
+    TwoFactor__CodeTtlMinutes: ${TWO_FACTOR_CODE_TTL_MINUTES:-10}
+    TwoFactor__MaxAttempts: ${TWO_FACTOR_MAX_ATTEMPTS:-5}
+    TwoFactor__ResendCooldownSeconds: ${TWO_FACTOR_RESEND_COOLDOWN_SECONDS:-60}
+    TwoFactor__MaxResendsPerHour: ${TWO_FACTOR_MAX_RESENDS_PER_HOUR:-5}
+    TwoFactor__MaxSkipsPerHour: ${TWO_FACTOR_MAX_SKIPS_PER_HOUR:-3}
   volumes:
     - rsa_keys:/run/keys:ro
     - document_data:/app-data/documents

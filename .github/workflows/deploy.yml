@@ -31,6 +31,16 @@ jobs:
             # Resend (sending key stays out of job env; see the restore step below)
             RESEND_FROM: ${{ secrets.RESEND_FROM }}
             EMAIL_VERIFICATION_ENABLED: ${{ vars.EMAIL_VERIFICATION_ENABLED }}
+            # 2FA email-code settings (staging repo variables; runtime defaults
+            # apply when unset). Enabling 2FA requires RESEND_FROM + the
+            # sending-only key, enforced by deploy-be.sh and Program.cs.
+            TWO_FACTOR_ENABLED: ${{ vars.TWO_FACTOR_ENABLED }}
+            TWO_FACTOR_PROVIDER_PASSWORD_FALLBACK: ${{ vars.TWO_FACTOR_PROVIDER_PASSWORD_FALLBACK }}
+            TWO_FACTOR_CODE_TTL_MINUTES: ${{ vars.TWO_FACTOR_CODE_TTL_MINUTES }}
+            TWO_FACTOR_MAX_ATTEMPTS: ${{ vars.TWO_FACTOR_MAX_ATTEMPTS }}
+            TWO_FACTOR_RESEND_COOLDOWN_SECONDS: ${{ vars.TWO_FACTOR_RESEND_COOLDOWN_SECONDS }}
+            TWO_FACTOR_MAX_RESENDS_PER_HOUR: ${{ vars.TWO_FACTOR_MAX_RESENDS_PER_HOUR }}
+            TWO_FACTOR_MAX_SKIPS_PER_HOUR: ${{ vars.TWO_FACTOR_MAX_SKIPS_PER_HOUR }}
 
         steps:
             - name: Checkout
@@ -85,6 +95,13 @@ jobs:
                   write_env MONSTERASP_FTP_PASSWORD "$MONSTERASP_FTP_PASSWORD" >> .env
                   write_env RESEND_FROM "${RESEND_FROM:-}" >> .env
                   write_env EMAIL_VERIFICATION_ENABLED "${EMAIL_VERIFICATION_ENABLED:-false}" >> .env
+                  write_env TWO_FACTOR_ENABLED "${TWO_FACTOR_ENABLED:-false}" >> .env
+                  write_env TWO_FACTOR_PROVIDER_PASSWORD_FALLBACK "${TWO_FACTOR_PROVIDER_PASSWORD_FALLBACK:-true}" >> .env
+                  write_env TWO_FACTOR_CODE_TTL_MINUTES "${TWO_FACTOR_CODE_TTL_MINUTES:-10}" >> .env
+                  write_env TWO_FACTOR_MAX_ATTEMPTS "${TWO_FACTOR_MAX_ATTEMPTS:-5}" >> .env
+                  write_env TWO_FACTOR_RESEND_COOLDOWN_SECONDS "${TWO_FACTOR_RESEND_COOLDOWN_SECONDS:-60}" >> .env
+                  write_env TWO_FACTOR_MAX_RESENDS_PER_HOUR "${TWO_FACTOR_MAX_RESENDS_PER_HOUR:-5}" >> .env
+                  write_env TWO_FACTOR_MAX_SKIPS_PER_HOUR "${TWO_FACTOR_MAX_SKIPS_PER_HOUR:-3}" >> .env
 
             - name: Deploy and verify backend
               run: bash ./deploy-be.sh

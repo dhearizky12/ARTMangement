@@ -25,6 +25,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Review> Reviews => Set<Review>();
     public DbSet<ContentBlock> ContentBlocks => Set<ContentBlock>();
     public DbSet<AuditLogEntry> AuditEntries => Set<AuditLogEntry>();
+    public DbSet<TwoFactorChallenge> TwoFactorChallenges => Set<TwoFactorChallenge>();
+    public DbSet<TwoFactorAccountState> TwoFactorAccountStates => Set<TwoFactorAccountState>();
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.Entity<User>().ToTable("Users");
@@ -93,6 +95,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<AuditLogEntry>().ToTable("AuditEntries");
         b.Entity<AuditLogEntry>().HasIndex(x => x.CreatedAt);
         b.Entity<AuditLogEntry>().HasIndex(x => new { x.TargetEntityType, x.TargetEntityId });
+        b.Entity<TwoFactorChallenge>().Property(x => x.Role).HasConversion<string>();
+        b.Entity<TwoFactorChallenge>().Property(x => x.Requirement).HasConversion<string>();
+        b.Entity<TwoFactorChallenge>().HasIndex(x => new { x.AccountId, x.Requirement });
+        b.Entity<TwoFactorAccountState>().HasKey(x => x.AccountId);
+        b.Entity<TwoFactorAccountState>().Property(x => x.Role).HasConversion<string>();
     }
 }
 public class AuthRepository(AppDbContext db) : IAuthRepository
@@ -129,4 +136,14 @@ public class AuthRepository(AppDbContext db) : IAuthRepository
         return changed == 1 ? await db.ProviderRefreshSessions.Include(x => x.Provider).ThenInclude(x => x.Credential).SingleAsync(x => x.TokenHash == hash, ct) : null;
     }
     public async Task SaveAsync(CancellationToken ct) { await db.SaveChangesAsync(ct); }
+    public async Task InvalidateTwoFactorChallengesAsync(Guid accountId, UserRole role, TwoFactorRequirement requirement, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+        await db.TwoFactorChallenges.Where(x => x.AccountId == accountId && x.Role == role && x.Requirement == requirement && x.VerifiedAt == null && x.InvalidatedAt == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.InvalidatedAt, now), ct);
+    }
+    public Task<TwoFactorChallenge?> FindTwoFactorChallengeAsync(Guid id, CancellationToken ct) => db.TwoFactorChallenges.SingleOrDefaultAsync(x => x.Id == id, ct);
+    public void AddTwoFactorChallenge(TwoFactorChallenge challenge) => db.TwoFactorChallenges.Add(challenge);
+    public Task<TwoFactorAccountState?> FindTwoFactorAccountStateAsync(Guid accountId, CancellationToken ct) => db.TwoFactorAccountStates.SingleOrDefaultAsync(x => x.AccountId == accountId, ct);
+    public void AddTwoFactorAccountState(TwoFactorAccountState state) => db.TwoFactorAccountStates.Add(state);
 }

@@ -23,6 +23,28 @@ export interface Session {
   refreshToken: string;
   refreshExpiresAt: string;
 }
+export interface TwoFactorLoginChallenge {
+  requiresTwoFactor: true;
+  challengeId: string;
+  method: "email";
+  maskedEmail: string;
+  fallbackAllowed: boolean;
+}
+export type SessionLevel = "full" | "limited" | "none";
+export function sessionLevel(accessToken: string): SessionLevel {
+  try {
+    const payload = accessToken.split(".")[1];
+    if (!payload) return "none";
+    const json = JSON.parse(
+      atob(payload.replace(/-/g, "+").replace(/_/g, "/")),
+    );
+    if (json.amr === "email_otp") return "full";
+    if (json.limited === "true") return "limited";
+    return "none";
+  } catch {
+    return "none";
+  }
+}
 import { clearAllOnboardingDrafts } from "../lib/draftStorage";
 const SESSION_STORAGE_KEY = "bantubantu.session";
 function loadStoredSession(): Session | null {
@@ -106,6 +128,8 @@ export class AuthApi {
       const error = await response.json().catch(() => ({}));
       if (error.code === "PROFILE_INCOMPLETE" && typeof window !== "undefined")
         window.dispatchEvent(new Event("profile-required"));
+      if (error.code === "mfa_required" && typeof window !== "undefined")
+        window.dispatchEvent(new Event("step-up-required"));
       const details = error.errors
         ? Object.values(error.errors).flat().join(" ")
         : null;
@@ -122,18 +146,60 @@ export class AuthApi {
     this.setSession(s);
   }
   async admin(email: string, password: string) {
-    const s = await this.request<Session>("/api/auth/admin/login", {
-      email,
-      password,
-    });
-    this.setSession(s);
+    return this.loginOrChallenge("/api/auth/admin/login", { email, password });
   }
   async provider(email: string, password: string) {
-    const s = await this.request<Session>("/api/auth/provider/login", {
+    return this.loginOrChallenge("/api/auth/provider/login", {
       email,
       password,
     });
+  }
+  private async loginOrChallenge(
+    path: string,
+    body: unknown,
+  ): Promise<Session | TwoFactorLoginChallenge> {
+    const data = await this.request<Session | TwoFactorLoginChallenge>(
+      path,
+      body,
+    );
+    if ("accessToken" in data) {
+      this.setSession(data as Session);
+      return data as Session;
+    }
+    return data as TwoFactorLoginChallenge;
+  }
+  async verifyTwoFactor(challengeId: string, code: string): Promise<Session> {
+    const s = await this.request<Session>("/api/auth/2fa/verify", {
+      challengeId,
+      code,
+    });
     this.setSession(s);
+    return s;
+  }
+  async resendTwoFactor(challengeId: string) {
+    await this.request<void>("/api/auth/2fa/resend", { challengeId });
+  }
+  async skipTwoFactor(challengeId: string): Promise<Session> {
+    const s = await this.request<Session>("/api/auth/2fa/skip", {
+      challengeId,
+    });
+    this.setSession(s);
+    return s;
+  }
+  async startProviderStepUp(): Promise<TwoFactorLoginChallenge> {
+    return this.post<TwoFactorLoginChallenge>("/api/provider/step-up/start", {});
+  }
+  async verifyProviderStepUp(
+    challengeId: string,
+    code: string,
+  ): Promise<Session> {
+    const s = await this.post<Session>("/api/provider/step-up/verify", {
+      challengeId,
+      code,
+      refreshToken: this.session?.refreshToken,
+    });
+    this.setSession(s);
+    return s;
   }
   async registerProvider(
     email: string,

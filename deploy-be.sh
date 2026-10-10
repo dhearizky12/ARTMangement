@@ -494,6 +494,30 @@ unset RESEND_SENDING_KEY
 
 
 # ------------------------------------------------------------
+# 2FA (email-code for admin/provider logins)
+#
+# Defaults mirror TwoFactorSettingsFactory. When TWO_FACTOR_ENABLED=true the
+# send path becomes mandatory, exactly as Program.cs enforces at startup:
+# a sending-only Resend key AND Resend__From must be present.
+# ------------------------------------------------------------
+
+export TwoFactor__Enabled="${TWO_FACTOR_ENABLED:-false}"
+
+export TwoFactor__ProviderPasswordFallback="${TWO_FACTOR_PROVIDER_PASSWORD_FALLBACK:-true}"
+
+export TwoFactor__CodeTtlMinutes="${TWO_FACTOR_CODE_TTL_MINUTES:-10}"
+
+export TwoFactor__MaxAttempts="${TWO_FACTOR_MAX_ATTEMPTS:-5}"
+
+export TwoFactor__ResendCooldownSeconds="${TWO_FACTOR_RESEND_COOLDOWN_SECONDS:-60}"
+
+export TwoFactor__MaxResendsPerHour="${TWO_FACTOR_MAX_RESENDS_PER_HOUR:-5}"
+
+export TwoFactor__MaxSkipsPerHour="${TWO_FACTOR_MAX_SKIPS_PER_HOUR:-3}"
+
+
+
+# ------------------------------------------------------------
 # Storage
 #
 # Program defaults to Local but requires RootPath
@@ -624,6 +648,59 @@ case "${EmailVerification__Enabled:-false}" in
 esac
 
 
+# ------------------------------------------------------------
+# 2FA configuration
+#
+# Mirrors TwoFactorSettingsFactory validation so a bad value fails HERE
+# before anything is uploaded. TWO_FACTOR_ENABLED=true requires the Resend
+# sending path exactly like Program.cs does at startup.
+# ------------------------------------------------------------
+
+two_factor_bool() {
+    local var="$1" label="$2"
+    local value="${!var:-}"
+    case "$value" in
+        "" | true | [Tt][Rr][Uu][Ee] | false | [Ff][Aa][Ll][Ss][Ee]) ;;
+        *) fail "$label harus true atau false (dapat \"$value\")." ;;
+    esac
+}
+
+two_factor_int() {
+    local var="$1" label="$2" min="$3" max="$4"
+    local value="${!var:-}"
+    [[ -z "$value" ]] && return 0
+    [[ "$value" =~ ^[0-9]+$ ]] && (( value >= min && value <= max )) \
+        || fail "$label harus integer antara $min-$max (dapat \"$value\")."
+}
+
+two_factor_bool TwoFactor__Enabled "TwoFactor__Enabled"
+two_factor_bool TwoFactor__ProviderPasswordFallback "TwoFactor__ProviderPasswordFallback"
+
+two_factor_int TwoFactor__CodeTtlMinutes "TwoFactor__CodeTtlMinutes" 2 30
+two_factor_int TwoFactor__MaxAttempts "TwoFactor__MaxAttempts" 3 10
+two_factor_int TwoFactor__ResendCooldownSeconds "TwoFactor__ResendCooldownSeconds" 30 300
+two_factor_int TwoFactor__MaxResendsPerHour "TwoFactor__MaxResendsPerHour" 1 20
+two_factor_int TwoFactor__MaxSkipsPerHour "TwoFactor__MaxSkipsPerHour" 1 10
+
+if (( TwoFactor__CodeTtlMinutes * 60 <= TwoFactor__ResendCooldownSeconds )); then
+    fail "TwoFactor__CodeTtlMinutes harus lebih besar dari TwoFactor__ResendCooldownSeconds (resend cooldown harus lebih pendek dari TTL kode)."
+fi
+
+case "${TwoFactor__Enabled:-false}" in
+    [Tt][Rr][Uu][Ee])
+
+        [[ -n "${Resend__ApiKey:-}" ]] \
+            || fail "TwoFactor__Enabled=true membutuhkan Resend__ApiKey (sending-only key). Buat dengan scripts/provision-resend-key.sh."
+
+        [[ -n "${Resend__From:-}" ]] \
+            || fail "TwoFactor__Enabled=true membutuhkan Resend__From (alamat pengirim pada domain Resend terverifikasi)."
+
+        ;;
+esac
+
+# ------------------------------------------------------------
+
+
 echo
 echo "Required application configuration OK."
 
@@ -647,6 +724,13 @@ echo "  Database               : configured"
 echo "  EmailVerification      : ${EmailVerification__Enabled:-false}"
 echo "  Resend:ApiKey          : $(if [[ -n "${Resend__ApiKey:-}" ]]; then echo "configured ($(basename "$RESEND_API_KEY_FILE"))"; else echo "not set"; fi)"
 echo "  Resend:From            : ${Resend__From:-not set}"
+echo "  TwoFactor:Enabled               : ${TwoFactor__Enabled:-false}"
+echo "  TwoFactor:ProviderPasswordFallback : ${TwoFactor__ProviderPasswordFallback:-true}"
+echo "  TwoFactor:CodeTtlMinutes        : ${TwoFactor__CodeTtlMinutes:-10}"
+echo "  TwoFactor:MaxAttempts           : ${TwoFactor__MaxAttempts:-5}"
+echo "  TwoFactor:ResendCooldownSeconds : ${TwoFactor__ResendCooldownSeconds:-60}"
+echo "  TwoFactor:MaxResendsPerHour     : ${TwoFactor__MaxResendsPerHour:-5}"
+echo "  TwoFactor:MaxSkipsPerHour       : ${TwoFactor__MaxSkipsPerHour:-3}"
 
 
 # ============================================================
@@ -800,6 +884,16 @@ variable_names = [
     "Resend__ApiKey",
     "Resend__From",
     "EmailVerification__Enabled",
+
+    # 2FA (email-code for admin/provider logins)
+    "TwoFactor__Enabled",
+    "TwoFactor__ProviderPasswordFallback",
+    "TwoFactor__CodeTtlMinutes",
+    "TwoFactor__MaxAttempts",
+    "TwoFactor__ResendCooldownSeconds",
+    "TwoFactor__MaxResendsPerHour",
+    "TwoFactor__MaxSkipsPerHour",
+
 
     # Storage
     "Storage__Provider",
@@ -992,6 +1086,19 @@ if values.get("EmailVerification__Enabled", "").lower() == "true" and not values
     sys.exit(1)
 
 
+if values.get("TwoFactor__Enabled", "").lower() == "true" and (not values.get("Resend__ApiKey") or not values.get("Resend__From")):
+
+    print(
+        "ERROR: TwoFactor__Enabled=true tetapi Resend__ApiKey atau Resend__From "
+        "tidak terinject. Cek scripts/provision-resend-key.sh dan RESEND_FROM.",
+        file=sys.stderr
+    )
+
+    sys.exit(1)
+
+
+
+
 print("All required hosted configuration found in web.config.")
 
 print()
@@ -1031,6 +1138,26 @@ safe_keys = [
     "AllowedHosts",
 
     "EmailVerification__Enabled",
+
+    "TwoFactor__Enabled",
+
+    "TwoFactor__ProviderPasswordFallback",
+
+    "TwoFactor__CodeTtlMinutes",
+
+    "TwoFactor__MaxAttempts",
+
+    "TwoFactor__ResendCooldownSeconds",
+
+    "TwoFactor__MaxResendsPerHour",
+
+    "TwoFactor__MaxSkipsPerHour",
+
+
+
+
+
+
 
     "Resend__From",
 ]

@@ -12,6 +12,7 @@ var builder = WebApplication.CreateBuilder(args);
 var seedMode = args.Contains("--seed-admin") || args.Contains("--seed-accounts");
 var databaseConnection = new DatabaseConnectionStringResolver().Resolve(builder.Configuration);
 var originPolicy = seedMode ? null : AllowedOriginPolicy.FromConfiguration(builder.Configuration);
+var twoFactor = TwoFactorSettingsFactory.FromConfiguration(builder.Configuration);
 var storageProvider = (builder.Configuration["Storage:Provider"] ?? "Local").Trim();
 if (!seedMode)
 {
@@ -32,7 +33,17 @@ if (!seedMode)
         foreach (var key in new[] { "Resend:ApiKey", "Resend:From" })
             if (string.IsNullOrWhiteSpace(builder.Configuration[key]))
                 throw new InvalidOperationException($"Missing configuration: {key} (required when EmailVerification:Enabled=true). Run scripts/provision-resend-key.sh and set RESEND_FROM.");
+    // Two-factor authentication sends a real email code. It will not start
+    // outside Development unless a sending-only Resend key and a from-address
+    // are configured (deploy-be.sh enforces the same rule, and the frontend
+    // cap is that 2FA sessions can never send mail with a missing key).
+    if (twoFactor.Enabled && !builder.Environment.IsDevelopment())
+        foreach (var key in new[] { "Resend:ApiKey", "Resend:From" })
+            if (string.IsNullOrWhiteSpace(builder.Configuration[key]))
+                throw new InvalidOperationException($"Missing configuration: {key} (required when TwoFactor:Enabled=true outside Development). Run scripts/provision-resend-key.sh and set RESEND_FROM.");
     foreach (var key in new[] { "Jwt:AccessMinutes", "Jwt:RefreshDays" }) if (!int.TryParse(builder.Configuration[key], out var value) || value < 1) throw new InvalidOperationException($"Invalid configuration: {key}");
+    if (!twoFactor.Enabled && !builder.Environment.IsDevelopment())
+        Console.Error.WriteLine("WARNING: TwoFactor:Enabled=false. Admin and provider logins do NOT require an email code.");
 }
 builder.Logging.AddProvider(new JsonFileLoggerProvider(builder.Configuration));
 builder.Services.AddControllers().AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));
@@ -79,6 +90,8 @@ builder.Services.AddSingleton<IPasswordService, PasswordService>();
 builder.Services.AddScoped<DemoAccountSeeder>();
 builder.Services.AddSingleton<RsaKeys>();
 builder.Services.AddSingleton<ITokenService, TokenService>();
+builder.Services.AddSingleton(twoFactor);
+builder.Services.AddSingleton<IEmailOtpService, EmailOtpService>();
 if (originPolicy is null)
     builder.Services.AddCors();
 else
@@ -95,6 +108,7 @@ builder.Services.AddRateLimiter(o =>
     o.RejectionStatusCode = 429;
     o.AddPolicy("upload", context => RateLimitPartition.GetFixedWindowLimiter(context.Connection.RemoteIpAddress?.ToString() ?? "unknown", _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
     o.AddPolicy("auth", context => RateLimitPartition.GetFixedWindowLimiter(context.Connection.RemoteIpAddress?.ToString() ?? "unknown", _ => new FixedWindowRateLimiterOptions { PermitLimit = 20, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    o.AddPolicy("2fa", context => RateLimitPartition.GetFixedWindowLimiter(context.Connection.RemoteIpAddress?.ToString() ?? "unknown", _ => new FixedWindowRateLimiterOptions { PermitLimit = 30, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
 });
 var app = builder.Build();
 if (args.Contains("--seed-admin"))
@@ -193,6 +207,22 @@ app.Use(async (context, next) =>
             if (user is null || role != user.Role.ToString() ||
                 context.User.FindFirst("agencyId")?.Value != (user as AdminAccount)?.AgencyId?.ToString() ||
                 !await repo.CanAuthenticateAsync(user, context.RequestAborted)) { context.Response.StatusCode = 401; return; }
+        }
+    }
+    await next();
+});
+// While 2FA is enabled, admin/provider access tokens with no session level
+// (issued before rollout) are rejected: the client must log in again.
+app.Use(async (context, next) =>
+{
+    if (twoFactor.Enabled && context.User.Identity?.IsAuthenticated == true)
+    {
+        var role = context.User.FindFirst("role")?.Value;
+        if (role is "PlatformAdmin" or "AgencyAdmin" or "Provider" &&
+            !context.User.HasClaim("amr", "email_otp") && !context.User.HasClaim("limited", "true"))
+        {
+            context.Response.StatusCode = 401;
+            return;
         }
     }
     await next();

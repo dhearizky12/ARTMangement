@@ -29,6 +29,7 @@ public class RefreshSession
     public string TokenHash { get; set; } = "";
     public DateTimeOffset ExpiresAt { get; set; }
     public DateTimeOffset? RevokedAt { get; set; }
+    public SessionAccess? Level { get; set; }
 }
 public class UserProfile
 {

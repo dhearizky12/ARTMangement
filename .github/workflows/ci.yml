@@ -70,6 +70,13 @@ jobs:
                   # resolver defaults to SslMode.Require and the throwaway
                   # container has no TLS.
                   BANTUBANTU_TEST_DB: postgresql://bantubantu:bantubantu-ci@127.0.0.1:5432/bantubantu_test?sslmode=disable
+                  #
+                  # TwoFactorAuthFactory prefers a dedicated BANTUBANTU_2FA_TEST_DB
+                  # but falls back to the throwaway database when unset: the 2FA
+                  # test factory migrates its own schema and never rolls it back.
+                  #
+                  BANTUBANTU_TEST_DB: postgresql://bantubantu:bantubantu-ci@127.0.0.1:5432/bantubantu_test?sslmode=disable
+                  BANTUBANTU_2FA_TEST_DB: postgresql://bantubantu:bantubantu-ci@127.0.0.1:5432/bantubantu_test?sslmode=disable
               run: |
                   # Guard: tests must never see an ambient database setting.
                   test -z "${DATABASE_URL:-}"

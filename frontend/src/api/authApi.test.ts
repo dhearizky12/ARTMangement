@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AuthApi } from "./authApi";
+import { AuthApi, sessionLevel } from "./authApi";
 const session = {
   accessToken: "test-token",
   expiresAt: new Date(Date.now() + 600000).toISOString(),
@@ -95,7 +95,97 @@ describe("AuthApi", () => {
     );
     expect(fetch.mock.calls[0][1].headers).not.toHaveProperty("Authorization");
   });
+  it("returns a 2FA challenge without creating a session", async () => {
+    const challenge = {
+      requiresTwoFactor: true,
+      challengeId: "challenge-1",
+      method: "email",
+      maskedEmail: "a***@example.test",
+      fallbackAllowed: true,
+    };
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify(challenge)));
+    vi.stubGlobal("fetch", fetch);
+    const api = new AuthApi("https://api.example.test");
+    const result = await api.admin("admin@example.test", "password");
+    expect(result).toEqual(challenge);
+    expect(api.currentSession).toBeNull();
+    expect(fetch.mock.calls[0][0]).toBe(
+      "https://api.example.test/api/auth/admin/login",
+    );
+  });
+  it("stores the session returned by the 2FA verify step", async () => {
+    const verified = { ...session, accessToken: "mfa-token" };
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify(verified)));
+    vi.stubGlobal("fetch", fetch);
+    const api = new AuthApi("https://api.example.test");
+    const result = await api.verifyTwoFactor("challenge-1", "123456");
+    expect(result.accessToken).toBe("mfa-token");
+    expect(api.currentSession?.accessToken).toBe("mfa-token");
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({
+      challengeId: "challenge-1",
+      code: "123456",
+    });
+  });
+  it("dispatches a step-up-required event on an mfa_required error", async () => {
+    const listeners: Record<string, () => void> = {};
+    vi.stubGlobal("window", {
+      addEventListener: (type: string, fn: () => void) => {
+        listeners[type] = fn;
+      },
+      dispatchEvent: (e: Event) => {
+        listeners[e.type]?.();
+        return true;
+      },
+      localStorage: memoryStorage(),
+    });
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(session)))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            title: "Verifikasi email diperlukan.",
+            status: 403,
+            code: "mfa_required",
+          }),
+          { status: 403 },
+        ),
+      );
+    vi.stubGlobal("fetch", fetch);
+    const api = new AuthApi("https://api.example.test");
+    await api.admin("admin@example.test", "password");
+    const handler = vi.fn();
+    window.addEventListener("step-up-required", handler);
+    await expect(api.get("/api/provider/application")).rejects.toMatchObject({
+      code: "mfa_required",
+    });
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
 });
+describe("sessionLevel", () => {
+  it("maps the amr claim to a full level", () => {
+    expect(sessionLevel(token({ amr: "email_otp" }))).toBe("full");
+  });
+  it("maps the limited claim to a limited level", () => {
+    expect(sessionLevel(token({ limited: "true" }))).toBe("limited");
+  });
+  it("defaults to none for tokens without 2FA claims", () => {
+    expect(sessionLevel(token({ sub: "1" }))).toBe("none");
+  });
+  it("falls back to none on malformed tokens", () => {
+    expect(sessionLevel("not-a-token")).toBe("none");
+  });
+});
+function token(payload: object) {
+  return `x.${btoa(JSON.stringify(payload))
+    .replace(/=+$/g, "")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")}.y`;
+}
 function memoryStorage(): Storage {
   const store = new Map<string, string>();
   return {
