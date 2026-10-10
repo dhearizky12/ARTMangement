@@ -13,6 +13,12 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace BantuBantu.Tests;
 
+// Tests that share the single diagnostics database run one at a time so a
+// concurrent MigrateAsync cannot race between test classes.
+[CollectionDefinition("diagnostics-db", DisableParallelization = true)]
+public sealed class DiagnosticsDatabaseCollection { }
+
+[Collection("diagnostics-db")]
 public class DiagnosticsTests
 {
     [Fact]
