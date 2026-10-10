@@ -90,6 +90,25 @@ public sealed class EmailOtpServiceTests
         Assert.DoesNotContain("481516", string.Concat(logger.Messages));
     }
 
+    [Fact]
+    public async Task DevelopmentWithSmtpHostSendsInsteadOfLoggingCode()
+    {
+        // Development + SMTP simulator configured: the code goes to the
+        // sender (Mailpit), never to the clear-code log.
+        var logger = new CapturingOtpLogger();
+        var sender = new RecordingSender();
+        var config = new ConfigurationManager
+        {
+            ["ASPNETCORE_ENVIRONMENT"] = "Development",
+            ["Email:Smtp:Host"] = "mailpit",
+        };
+        var otp = NewOtp(config, sender, logger);
+        await otp.SendAsync("a@example.test", "481516", 10, default);
+        Assert.Equal("a@example.test", sender.Last?.To);
+        Assert.Contains("481516", sender.Last?.Html ?? "");
+        Assert.DoesNotContain("481516", string.Concat(logger.Messages));
+    }
+
     private static EmailOtpService NewOtp(IConfiguration config, IEmailSender sender, ILogger<EmailOtpService>? logger = null)
     {
         using var rsa = RSA.Create(2048);

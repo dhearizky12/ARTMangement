@@ -55,7 +55,9 @@ public class EmailOtpService : IEmailOtpService
     {
         var environment = config["ASPNETCORE_ENVIRONMENT"];
         var apiKey = config["Resend:ApiKey"];
-        if (string.Equals(environment, "Development", StringComparison.OrdinalIgnoreCase) && string.IsNullOrWhiteSpace(apiKey))
+        var smtpHost = config["Email:Smtp:Host"];
+        if (string.Equals(environment, "Development", StringComparison.OrdinalIgnoreCase)
+            && string.IsNullOrWhiteSpace(apiKey) && string.IsNullOrWhiteSpace(smtpHost))
         {
             logger.LogWarning("2FA kode untuk {To} (hanya pengembangan): {Code}", to, code);
             return;

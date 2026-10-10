@@ -66,10 +66,13 @@ builder.Services.AddSingleton<IDocumentProcessor, DocumentProcessor>();
 builder.Services.AddSingleton<IFileStorage>(_ => storageProvider.Equals("S3", StringComparison.OrdinalIgnoreCase)
     ? new S3FileStorage(builder.Configuration)
     : new LocalFileStorage(builder.Configuration));
-// Email: Development logs instead of sending (no Resend key needed locally).
-// Everywhere else mail goes through Resend with the sending-only key from
+// Email: an explicit SMTP relay (Mailpit locally) wins everywhere; otherwise
+// Development logs instead of sending (no Resend key needed locally), and
+// every other environment goes through Resend with the sending-only key from
 // Resend:ApiKey; the sender address comes from the configurable Resend:From.
-if (builder.Environment.EnvironmentName == "Development")
+if (!string.IsNullOrWhiteSpace(builder.Configuration["Email:Smtp:Host"]))
+    builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
+else if (builder.Environment.EnvironmentName == "Development")
     builder.Services.AddSingleton<IEmailSender, LoggingEmailSender>();
 else
     builder.Services.AddHttpClient<IEmailSender, ResendEmailSender>(client => client.BaseAddress = new Uri("https://api.resend.com/"));
