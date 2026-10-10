@@ -1,7 +1,7 @@
 using BantuBantu.Domain;
 namespace BantuBantu.Application;
 
-public class ProviderService(IMarketplaceRepository repo, ICurrentActor current, IWilayahRepository wilayah, IFileStorage files, IDocumentProcessor images, IPasswordService passwords, IAuthRepository auth) : ApplicationService(current)
+public class ProviderService(IMarketplaceRepository repo, ICurrentActor current, IWilayahRepository wilayah, IFileStorage files, IDocumentProcessor images, IPasswordService passwords, IAuthRepository auth, INotificationService notifications) : ApplicationService(current)
 {
     private async Task<Provider> Owned(Guid id, CancellationToken ct) => await repo.AdminProviderAsync(Admin(), id, ct) ?? throw new ProfileException("Penyedia tidak ditemukan.", 404);
     private async Task<Provider> Own(CancellationToken ct) { var actor = Provider(); return await repo.AdminProviderAsync(actor, actor.ProviderId!.Value, ct) ?? throw new ProfileException("Penyedia tidak ditemukan.", 404); }
@@ -64,7 +64,9 @@ public class ProviderService(IMarketplaceRepository repo, ICurrentActor current,
         p.ModerationNote = null;
         p.UpdatedAt = DateTimeOffset.UtcNow;
         repo.Audit(actor, p.Id, "provider.application.submit", "");
+        await notifications.EmitApplicationSubmittedAsync(p.Id, p.Version, ct);
         await repo.SaveAsync(ct);
+        await notifications.DispatchEnqueuedAsync(ct);
         return await OwnApplication(ct);
     }
     public async Task<ProviderDto> UpdateOwnAvailability(AvailabilityUpdateRequest request, CancellationToken ct)
@@ -154,10 +156,13 @@ public class ProviderService(IMarketplaceRepository repo, ICurrentActor current,
     {
         var p = await Owned(id, ct); if (r.Status == VerificationStatus.Verified && (Step(p) != "verify" || !r.IdentityVerified || !r.BackgroundCheckPassed || !r.ContractSigned || !await repo.CategoriesExistAsync(p.Categories.Select(c => c.ServiceCategoryId).ToArray(), ct))) throw new ProfileException("Lengkapi semua tahap dan tiga pemeriksaan sebelum verifikasi.");
         if (r.Status == VerificationStatus.Rejected && string.IsNullOrWhiteSpace(r.Note)) throw new ProfileException("Alasan penolakan wajib diisi.");
+        var oldStatus = p.ApplicationStatus;
         p.IdentityVerified = r.IdentityVerified; p.BackgroundCheckPassed = r.BackgroundCheckPassed; p.ContractSigned = r.ContractSigned; p.VerificationStatus = r.Status; p.ApplicationStatus = r.Status == VerificationStatus.Verified ? ProviderApplicationStatus.Approved : r.Status == VerificationStatus.Rejected ? ProviderApplicationStatus.Rejected : p.ApplicationStatus; p.ModerationNote = r.Note; p.ReviewedAt = DateTimeOffset.UtcNow; p.ReviewedBy = Admin().Id; p.UpdatedAt = DateTimeOffset.UtcNow;
         var action = r.Status == VerificationStatus.Rejected ? "provider.reject" : "provider.verify";
         repo.Audit(Admin(), action, "Provider", id, r.Note, $"{r.Status}; identity={r.IdentityVerified}; background={r.BackgroundCheckPassed}; contract={r.ContractSigned}");
-        await repo.SaveAsync(ct); return AdminMap(p);
+        if (p.ApplicationStatus != oldStatus && p.ApplicationStatus is ProviderApplicationStatus.Approved or ProviderApplicationStatus.Rejected)
+            await notifications.EmitApplicationDecisionAsync(p.Id, p.Version, p.ApplicationStatus == ProviderApplicationStatus.Approved ? NotificationEvents.ApplicationApproved : NotificationEvents.ApplicationRejected, r.Note, ct);
+        await repo.SaveAsync(ct); await notifications.DispatchEnqueuedAsync(ct); return AdminMap(p);
     }
     public async Task<ProviderAdminDto> Moderate(Guid id, ProviderApplicationStatus status, ProviderModerationRequest request, CancellationToken ct)
     {
@@ -184,6 +189,7 @@ public class ProviderService(IMarketplaceRepository repo, ICurrentActor current,
             if (string.IsNullOrWhiteSpace(request.Note)) throw new ProfileException("Alasan penangguhan wajib diisi.");
         }
         else throw new ProfileException("Status moderasi tidak valid.");
+        var oldStatus = p.ApplicationStatus;
         p.ApplicationStatus = status; p.ModerationNote = request.Note?.Trim(); p.ReviewedAt = DateTimeOffset.UtcNow; p.ReviewedBy = actor.Id; p.UpdatedAt = DateTimeOffset.UtcNow;
         var action = status switch
         {
@@ -192,7 +198,18 @@ public class ProviderService(IMarketplaceRepository repo, ICurrentActor current,
             ProviderApplicationStatus.Rejected => "provider.reject",
             _ => "provider.application." + status
         };
-        repo.Audit(actor, action, "Provider", id, p.ModerationNote, p.ModerationNote ?? ""); await repo.SaveAsync(ct); return AdminMap(p);
+        repo.Audit(actor, action, "Provider", id, p.ModerationNote, p.ModerationNote ?? "");
+        if (p.ApplicationStatus != oldStatus)
+        {
+            if (status == ProviderApplicationStatus.Suspended)
+                await notifications.EmitProviderSuspendedAsync(p.Id, p.Version, request.Note!.Trim(), ct);
+            else if (status is ProviderApplicationStatus.Approved or ProviderApplicationStatus.Rejected or ProviderApplicationStatus.NeedsChanges)
+                await notifications.EmitApplicationDecisionAsync(p.Id, p.Version,
+                    status == ProviderApplicationStatus.Approved ? NotificationEvents.ApplicationApproved
+                    : status == ProviderApplicationStatus.Rejected ? NotificationEvents.ApplicationRejected
+                    : NotificationEvents.ApplicationNeedsChanges, request.Note?.Trim(), ct);
+        }
+        await repo.SaveAsync(ct); await notifications.DispatchEnqueuedAsync(ct); return AdminMap(p);
     }
     public async Task<ProviderAdminDto> Reactivate(Guid id, CancellationToken ct)
     {
@@ -205,7 +222,9 @@ public class ProviderService(IMarketplaceRepository repo, ICurrentActor current,
         p.ReviewedBy = actor.Id;
         p.UpdatedAt = DateTimeOffset.UtcNow;
         repo.Audit(actor, "provider.reactivate", "Provider", id);
+        await notifications.EmitProviderReactivatedAsync(p.Id, p.Version, ct);
         await repo.SaveAsync(ct);
+        await notifications.DispatchEnqueuedAsync(ct);
         return AdminMap(p);
     }
 }

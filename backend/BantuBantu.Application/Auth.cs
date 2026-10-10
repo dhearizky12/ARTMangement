@@ -82,7 +82,7 @@ public interface IAuthService
     Task<TwoFactorLoginChallenge> StartProviderStepUpAsync(Guid providerId, string email, string jti, CancellationToken ct);
     Task<AuthOutcome> VerifyProviderStepUpAsync(Guid challengeId, string code, Guid providerId, string jti, string refreshToken, CancellationToken ct);
 }
-public class AuthService(IAuthRepository repository, IGoogleIdentityVerifier google, ITokenService tokens, IPasswordService passwords, IEmailOtpService otp, TwoFactorSettings twoFactor, ILoggerFactory loggerFactory) : IAuthService
+public class AuthService(IAuthRepository repository, IGoogleIdentityVerifier google, ITokenService tokens, IPasswordService passwords, IEmailOtpService otp, TwoFactorSettings twoFactor, INotificationService notifications, ILoggerFactory loggerFactory) : IAuthService
 {
     private readonly ILogger security = loggerFactory.CreateLogger("BantuBantu.Security");
 
@@ -130,7 +130,9 @@ public class AuthService(IAuthRepository repository, IGoogleIdentityVerifier goo
         if (credential is null || !passwords.VerifyProvider(credential.PasswordHash, currentPassword)) throw new AuthenticationFailedException();
         credential.PasswordHash = passwords.HashProvider(newPassword);
         credential.PasswordChangedAt = DateTimeOffset.UtcNow;
+        await notifications.EmitPasswordChangedAsync(credential.ProviderId, credential.Email, credential.Provider.FullName, credential.PasswordChangedAt.Ticks.ToString(), credential.EmailVerifiedAt is not null, ct);
         await repository.SaveAsync(ct);
+        await notifications.DispatchEnqueuedAsync(ct);
     }
     public async Task<AuthOutcome> RefreshAsync(string token, CancellationToken ct)
     {
