@@ -64,7 +64,7 @@ public interface IAuthService
     Task LogoutAsync(string token, CancellationToken ct);
     Task<UserDto> MeAsync(Guid id, CancellationToken ct);
 }
-public class AuthService(IAuthRepository repository, IGoogleIdentityVerifier google, ITokenService tokens, IPasswordService passwords) : IAuthService
+public class AuthService(IAuthRepository repository, IGoogleIdentityVerifier google, ITokenService tokens, IPasswordService passwords, IEmailOtpService otp, TwoFactorSettings twoFactor, INotificationService notifications, ILoggerFactory loggerFactory) : IAuthService
 {
     public async Task<AuthResult> GoogleAsync(string credential, CancellationToken ct)
     {
@@ -109,7 +109,9 @@ public class AuthService(IAuthRepository repository, IGoogleIdentityVerifier goo
         if (credential is null || !passwords.VerifyProvider(credential.PasswordHash, currentPassword)) throw new AuthenticationFailedException();
         credential.PasswordHash = passwords.HashProvider(newPassword);
         credential.PasswordChangedAt = DateTimeOffset.UtcNow;
+        await notifications.EmitPasswordChangedAsync(credential.ProviderId, credential.Email, credential.Provider.FullName, credential.PasswordChangedAt.Ticks.ToString(), credential.EmailVerifiedAt is not null, ct);
         await repository.SaveAsync(ct);
+        await notifications.DispatchEnqueuedAsync(ct);
     }
     public async Task<AuthResult> RefreshAsync(string token, CancellationToken ct)
     {

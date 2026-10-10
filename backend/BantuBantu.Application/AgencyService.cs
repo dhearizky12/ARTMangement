@@ -1,7 +1,7 @@
 using BantuBantu.Domain;
 namespace BantuBantu.Application;
 
-public class AgencyService(IMarketplaceRepository repo, ICurrentActor current, IAuthRepository auth, IPasswordService passwords) : ApplicationService(current)
+public class AgencyService(IMarketplaceRepository repo, ICurrentActor current, IAuthRepository auth, IPasswordService passwords, INotificationService notifications) : ApplicationService(current)
 {
     public Task<List<Agency>> Agencies(CancellationToken ct) { Platform(); return repo.AgenciesAsync(ct); }
     public async Task<Agency> CreateAgency(AgencyRequest r, CancellationToken ct)
@@ -18,9 +18,13 @@ public class AgencyService(IMarketplaceRepository repo, ICurrentActor current, I
         var actor = Platform();
         if (r.Status is not (AgencyStatus.Approved or AgencyStatus.Suspended)) throw new ProfileException("Status agency tidak valid.");
         var agency = await repo.AgencyAsync(id, ct) ?? throw new ProfileException("Agency tidak ditemukan.", 404);
+        var oldStatus = agency.Status;
         agency.Status = r.Status;
         repo.Audit(actor, r.Status == AgencyStatus.Suspended ? "agency.suspend" : "agency.reactivate", "Agency", id, detail: agency.Name);
+        if (agency.Status != oldStatus)
+            await notifications.EmitAgencyStatusAsync(agency.Id, r.Status.ToString(), ct);
         await repo.SaveAsync(ct);
+        await notifications.DispatchEnqueuedAsync(ct);
         return agency;
     }
     public Task<Agency> Suspend(Guid id, CancellationToken ct) => SetAgencyStatus(id, new AgencyStatusRequest(AgencyStatus.Suspended), ct);
