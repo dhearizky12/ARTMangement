@@ -113,6 +113,25 @@
     flex-direction: column;
     overflow: hidden;
   }
+
+  /* On a wide screen, pin the app to a phone-width column. contain: paint makes
+     #root the containing block for the fixed tab bar and sticky bars. */
+  @media (min-width: 520px) {
+    body {
+      display: flex;
+      justify-content: center;
+      background: var(--color-offstage);
+    }
+
+    #root {
+      width: 470px;
+      contain: paint;
+      background: var(--color-surface);
+      border-left: 1px solid var(--color-hairline);
+      border-right: 1px solid var(--color-hairline);
+      box-shadow: var(--shadow-frame);
+    }
+  }
 }
 
 @keyframes spin {
