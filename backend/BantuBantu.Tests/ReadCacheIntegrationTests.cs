@@ -44,4 +44,29 @@ public class ReadCacheIntegrationTests
         var warm = await Warm(client, "/api/content");
         Assert.Equal(0, ProviderBrowseContractTests.SqlCount(warm));
     }
+
+    // The cached content snapshot must be a single reusable instance that is
+    // never EF-tracked, so later requests cannot accidentally observe or flush
+    // mutations to it through a DbContext.
+    [Fact]
+    public async Task Content_SnapshotIsReusedAndDetached()
+    {
+        using var factory = new DiagnosticsFactory();
+        await Prepare(factory);
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        if (!await db.ContentBlocks.AnyAsync(c => c.Id == "cache-uji"))
+        {
+            db.ContentBlocks.Add(new BantuBantu.Domain.ContentBlock { Id = "cache-uji", Title = "Uji", Body = "Isi", SortOrder = 1, IsActive = true });
+            await db.SaveChangesAsync();
+        }
+
+        var catalog = scope.ServiceProvider.GetRequiredService<CatalogService>();
+        var first = await catalog.Content(CancellationToken.None);
+        var second = await catalog.Content(CancellationToken.None);
+
+        Assert.NotEmpty(first);
+        Assert.Same(first, second);
+        Assert.All(first, block => Assert.Equal(EntityState.Detached, db.Entry(block).State));
+    }
 }
