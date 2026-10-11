@@ -35,6 +35,17 @@ public class MarketplaceRepository(AppDbContext db, IProviderScope scope) : IMar
     public Task<List<Provider>> AdminProvidersAsync(Actor actor, CancellationToken ct) => Details(scope.Apply(db.Providers, actor)).OrderByDescending(p => p.CreatedAt).Take(200).ToListAsync(ct);
     public Task<List<Provider>> AdminVerificationQueueAsync(Actor actor, CancellationToken ct) => Details(scope.Apply(db.Providers, actor).Where(p => p.ApplicationStatus == ProviderApplicationStatus.Submitted && p.VerificationStatus == VerificationStatus.Pending)).OrderByDescending(p => p.SubmittedAt).ToListAsync(ct);
     public Task<Provider?> AdminProviderAsync(Actor actor, Guid id, CancellationToken ct) => Details(scope.Apply(db.Providers, actor)).SingleOrDefaultAsync(p => p.Id == id, ct);
+    // Dashboard counters are computed with SQL COUNT so they stay correct past the
+    // 200-row cap on the admin list endpoints and never materialise a roster.
+    public async Task<AdminDashboardStats> AdminDashboardStatsAsync(Actor actor, CancellationToken ct)
+    {
+        var providers = scope.Apply(db.Providers, actor);
+        var pendingVerification = await providers.CountAsync(p => p.ApplicationStatus == ProviderApplicationStatus.Submitted && p.VerificationStatus == VerificationStatus.Pending, ct);
+        var totalProviders = await providers.CountAsync(ct);
+        var pendingOrders = await ScopedOrders(actor).CountAsync(o => o.Status == OrderStatus.Pending, ct);
+        var agencies = actor.Role == UserRole.PlatformAdmin ? await db.Agencies.CountAsync(ct) : 0;
+        return new AdminDashboardStats(pendingVerification, pendingOrders, totalProviders, agencies);
+    }
     public void AddDocument(ProviderDocument document) => db.Set<ProviderDocument>().Add(document);
     public void AddProvider(Provider p) => db.Providers.Add(p);
     public async Task<bool> CategoriesExistAsync(Guid[] ids, CancellationToken ct) => ids.Distinct().Count() == ids.Length && await db.ServiceCategories.CountAsync(c => ids.Contains(c.Id) && c.IsActive, ct) == ids.Length;

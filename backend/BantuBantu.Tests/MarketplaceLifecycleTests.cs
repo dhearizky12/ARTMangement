@@ -280,5 +280,29 @@ public partial class AuthIntegrationTests
         Assert.Contains(audit, x => x.Action == "provider.reactivate" && x.TargetEntityId == own.Provider.Id);
         Assert.Contains(audit, x => x.Action == "provider.reject" && x.TargetEntityId == own.Provider.Id && x.Reason!.Contains("Platform override"));
         Assert.Contains(audit, x => x.Action == "agency-admin.create" && x.TargetEntityType == "AdminAccount");
+        // Dashboard counters are real SQL COUNTs: scoped to the caller's agency and
+        // exact past the 200-row cap the roster list applies.
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.Providers.Add(new Provider { Id = Guid.NewGuid(), FullName = "Agency A pending", AgencyId = agencies[0].Id, ApplicationStatus = ProviderApplicationStatus.Submitted, VerificationStatus = VerificationStatus.Pending });
+            db.Providers.AddRange(Enumerable.Range(0, 210).Select(i => new Provider { Id = Guid.NewGuid(), FullName = $"Agency A bulk {i}", AgencyId = agencies[0].Id, ApplicationStatus = ProviderApplicationStatus.Approved, VerificationStatus = VerificationStatus.Verified }));
+            db.Orders.Add(new Order { CustomerId = customerSession.User.Id, ProviderId = own.Provider.Id, Status = OrderStatus.Pending, ScheduledDate = DateOnly.FromDateTime(DateTime.UtcNow), Price = 100000, PricingType = PricingType.PerVisit, VillageId = address.VillageId, AddressDetail = "Pesanan menunggu A" });
+            await db.SaveChangesAsync();
+        }
+        var platformStats = await Read<AdminDashboardStats>(await platform.GetAsync("/api/admin/dashboard/stats"));
+        var aStats = await Read<AdminDashboardStats>(await aClient.GetAsync("/api/admin/dashboard/stats"));
+        var bStats = await Read<AdminDashboardStats>(await bClient.GetAsync("/api/admin/dashboard/stats"));
+        Assert.Equal(2, platformStats.Agencies);
+        Assert.Equal(212, aStats.Providers);
+        Assert.Equal(1, bStats.Providers);
+        Assert.Equal(1, aStats.PendingVerification);
+        Assert.Equal(0, bStats.PendingVerification);
+        Assert.Equal(1, aStats.PendingOrders);
+        Assert.Equal(0, bStats.PendingOrders);
+        Assert.Equal(aStats.Providers + bStats.Providers, platformStats.Providers - 2);
+        var cappedRoster = await Read<ProviderAdminDto[]>(await aClient.GetAsync("/api/admin/providers"));
+        Assert.Equal(200, cappedRoster.Length);
+        Assert.True(aStats.Providers > cappedRoster.Length);
     }
 }

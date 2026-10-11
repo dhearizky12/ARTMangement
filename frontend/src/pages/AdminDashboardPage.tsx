@@ -287,7 +287,7 @@ export function AdminDashboardPage() {
         : Promise.resolve([] as Agency[]),
     "roster-agencies",
   );
-  const orders = useResource(adminApi.orders, "dashboard-orders");
+  const stats = useResource(adminApi.dashboardStats, "dashboard-stats");
   const [agencyId, setAgencyId] = useState("");
   const [providerEmail, setProviderEmail] = useState("");
   const [providerPassword, setProviderPassword] = useState("");
@@ -315,25 +315,21 @@ export function AdminDashboardPage() {
       <div className="stats-grid">
         <Card>
           <span>Queue verifikasi</span>
-          <strong>{verificationQueue.data?.length ?? "—"}</strong>
+          <strong>{stats.data?.pendingVerification ?? "—"}</strong>
         </Card>
         <Card>
           <span>Pesanan menunggu</span>
-          <strong>
-            {orders.data
-              ? orders.data.filter((o) => o.status === "Pending").length
-              : "—"}
-          </strong>
+          <strong>{stats.data?.pendingOrders ?? "—"}</strong>
         </Card>
         {session?.user.role === "PlatformAdmin" ? (
           <Card>
             <span>Agency</span>
-            <strong>{agencies.data?.length ?? "—"}</strong>
+            <strong>{stats.data?.agencies ?? "—"}</strong>
           </Card>
         ) : (
           <Card>
             <span>Roster provider</span>
-            <strong>{roster.data?.length ?? "—"}</strong>
+            <strong>{stats.data?.providers ?? "—"}</strong>
           </Card>
         )}
       </div>

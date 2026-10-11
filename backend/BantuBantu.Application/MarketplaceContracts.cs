@@ -31,6 +31,7 @@ public record ApplicationSectionDto(string Id, string Label, string Status);
 public record ProviderPage(int Total, int Page, int PageSize, ProviderDto[] Items);
 public record OrderDto(Guid Id, Guid ProviderId, string ProviderName, OrderStatus Status, DateOnly ScheduledDate, decimal Price, PricingType PricingType, string AddressDetail, string VillageId, bool Reviewed);
 public record ProviderModerationRequest([StringLength(1000)] string? Note);
+public record AdminDashboardStats(int PendingVerification, int PendingOrders, int Providers, int Agencies);
 public interface IMarketplaceRepository
 {
     Task<(int Total, List<Provider> Items)> BrowseAsync(string? q, Guid? category, string? villageId, int page, int pageSize, CancellationToken ct);
@@ -38,6 +39,7 @@ public interface IMarketplaceRepository
     Task<List<Provider>> AdminProvidersAsync(Actor actor, CancellationToken ct);
     Task<List<Provider>> AdminVerificationQueueAsync(Actor actor, CancellationToken ct);
     Task<Provider?> AdminProviderAsync(Actor actor, Guid id, CancellationToken ct);
+    Task<AdminDashboardStats> AdminDashboardStatsAsync(Actor actor, CancellationToken ct);
     void AddProvider(Provider provider);
     void AddDocument(ProviderDocument document);
     Task<bool> CategoriesExistAsync(Guid[] ids, CancellationToken ct);
