@@ -34,8 +34,9 @@ public record ProviderModerationRequest([StringLength(1000)] string? Note);
 public record AdminDashboardStats(int PendingVerification, int PendingOrders, int Providers, int Agencies);
 public interface IMarketplaceRepository
 {
-    Task<(int Total, List<Provider> Items)> BrowseAsync(string? q, Guid? category, string? villageId, int page, int pageSize, CancellationToken ct);
-    Task<Provider?> PublicProviderAsync(Guid id, CancellationToken ct);
+    Task<(int Total, List<ProviderDto> Items)> BrowseAsync(string? q, Guid? category, string? villageId, int page, int pageSize, CancellationToken ct);
+    Task<BookingProvider?> BookingProviderAsync(Guid id, CancellationToken ct);
+    Task<ProviderDto?> PublicProviderReadAsync(Guid id, CancellationToken ct);
     Task<List<Provider>> AdminProvidersAsync(Actor actor, CancellationToken ct);
     Task<List<Provider>> AdminVerificationQueueAsync(Actor actor, CancellationToken ct);
     Task<Provider?> AdminProviderAsync(Actor actor, Guid id, CancellationToken ct);
