@@ -1,0 +1,3987 @@
+openapi: 3.1.0
+
+info:
+  title: bantubantu API
+  version: 0.2.0
+  summary: What the customer and agent apps need from the backend.
+  description: |
+    The contract for every front-end. Each operation carries a tag for the
+    surface it belongs to: catalog, identity and booking are the customer app's,
+    agensi is the agent app's. Shapes used by more than one surface are defined
+    once.
+
+servers:
+  - url: '{mount}/api'
+    description: The app is served under a deployment prefix read from <base href>.
+    variables:
+      mount:
+        default: ''
+        description: Deployment prefix, empty when served at the root.
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: catalog
+    description: Public reads, so a guest can browse before signing in.
+  - name: identity
+    description: Phone and WhatsApp OTP, the session, the profile, addresses.
+  - name: booking
+    description: Quotes, vouchers, orders, payment, cancellation, reviews.
+  - name: agensi
+    description: |
+      The agency's own surface. Requires a staff token, and the agency is taken
+      from that token. The X-Agency header is only compared against it, see
+      AgencyAssertion.
+
+paths:
+  # =========================================================== catalog =======
+  /agency:
+    get:
+      operationId: getAgency
+      tags: [catalog]
+      security: []
+      summary: The agency this build is for.
+      description: |
+        Served rather than compiled in, so an agency's rating, vetting checks or
+        promotion can change without a rebuild.
+
+        Deliberately does NOT include `color`, `logo`, `initials`, `appName` or
+        `desc`: those are consumed by the BUILD — the colour ramp, the icon
+        rasteriser, the HTML `<meta>` and the web app manifest — and a fetched
+        value cannot reach any of them.
+
+        `description` IS served and is not `desc`. The agency's blurb is stored
+        state it edits through `PATCH /agensi/agency`; `desc` is the bundle's own
+        description, and conflating them means an edit that reaches one surface
+        and not the other.
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+      responses:
+        '200':
+          description: The agency profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Agency'
+              examples:
+                humaira:
+                  value:
+                    slug: humaira
+                    name: Humaira Care
+                    city: Salatiga, Jawa Tengah
+                    description: >-
+                      Agensi penyalur ART terpercaya di Salatiga sejak 2017.
+                      Semua ART melewati verifikasi identitas, cek latar
+                      belakang, dan pelatihan dasar.
+                    serviceAreas: [Sidorejo, Tingkir, Argomulyo]
+                    rating: 4.7
+                    reviewCount: 17
+                    activeHelperCount: 6
+                    completedJobs: 0
+                    since: 2017
+                    guarantee: Garansi ganti ART dalam 7 hari
+                    checks:
+                      - Verifikasi KTP & Kartu Keluarga
+                      - Cek latar belakang & referensi
+                      - Pelatihan dasar & wawancara
+                      - Kontrak kerja resmi
+                    whatsapp: '628123456789'
+                    promo:
+                      headline: Diskon 50% pesanan pertama
+                      code: HUMAIRA50
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /reference:
+    get:
+      operationId: getReference
+      tags: [catalog]
+      security: []
+      summary: Every list the UI offers as a choice.
+      description: |
+        These were eight hardcoded arrays inside screen files. A cancellation
+        reason should not require an app release, and the server needs the lists
+        anyway to validate what it is sent.
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+      responses:
+        '200':
+          description: The reference lists.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reference'
+              examples:
+                default:
+                  value:
+                    categories:
+                      - { id: bersih, label: Bersih-bersih, icon: ph-broom }
+                      - { id: masak, label: Masak, icon: ph-cooking-pot }
+                    bookingTimes: ['07:00', '08:00', '09:00', '13:00', '15:00', '16:00']
+                    frequencies:
+                      - { id: mingguan, label: Mingguan }
+                      - { id: bulanan, label: Bulanan }
+                    addressLabels: [Rumah, Kantor, Lainnya]
+                    cities: [Salatiga, Semarang, Lainnya]
+                    cancelReasons:
+                      - Salah pilih jadwal
+                      - Sudah tidak butuh
+                      - Ingin ganti ART
+                      - Harga terlalu mahal
+                      - Lainnya
+                    reviewTags:
+                      - Tepat waktu
+                      - Ramah & sopan
+                      - Hasil rapi
+                      - Teliti
+                      - Komunikatif
+                      - Cekatan
+                    paymentMethods:
+                      - { id: qris, label: QRIS, group: qris, abbr: QR }
+                      - { id: va_bca, label: BCA Virtual Account, group: va, abbr: BCA }
+                      - { id: gopay, label: GoPay, group: ewallet, abbr: GP }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /helpers:
+    get:
+      operationId: listHelpers
+      tags: [catalog]
+      # Public, but a token is READ when one is sent: `favorite=true` is scoped
+      # to the caller. `[]` alone would have made the saved filter a second
+      # endpoint returning the same shape.
+      security: [{}, { bearerAuth: [] }]
+      summary: The agency's ART.
+      description: |
+        Every parameter composes: a query, a category, a sort and the saved
+        filter sent together narrow to their intersection, ordered as `sort`
+        asks.
+
+        `favorite` is the only parameter that requires a bearer token. Sent
+        without one the response is 401 — never a silent fall back to the
+        unfiltered roster, which would show a customer someone else's idea of
+        what they had saved.
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+        - name: cat
+          in: query
+          required: false
+          description: A category id. An unknown one is rejected, not ignored.
+          schema: { type: string }
+          examples: { masak: { value: masak } }
+        - name: q
+          in: query
+          required: false
+          description: Free text, matched against name, service label and skills.
+          schema: { type: string }
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [rekomendasi, harga_asc, harga_desc, rating, pengalaman]
+            default: rekomendasi
+        - name: favorite
+          in: query
+          required: false
+          description: |
+            When true, only the ART the authenticated customer has saved with
+            this agency. Requires a bearer token.
+          schema: { type: boolean }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: |
+            A page of ART. Empty is a 200 with `items: []` — an empty result is
+            not a missing resource.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HelperPage'
+              examples:
+                page:
+                  value:
+                    items:
+                      - id: siti
+                        name: Siti Aminah
+                        initials: SA
+                        avatarTone: sage
+                        categories: [masak, bersih]
+                        serviceLabel: Masak & Bersih-bersih
+                        experienceYears: 8
+                        rating: 4.9
+                        reviewCount: 86
+                        completedJobs: 210
+                        price: 90000
+                        priceUnit: kunjungan
+                        city: Salatiga
+                        availableDays: [1, 2, 3, 4, 5]
+                        idVerified: true
+                        backgroundChecked: true
+                    total: 1
+                    limit: 20
+                    offset: 0
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401':
+          description: |
+            `favorite=true` without a bearer token. The unauthenticated roster
+            is still a 200 — only the saved filter needs a caller.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /helpers/{helperId}:
+    parameters:
+      - name: helperId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getHelper
+      tags: [catalog]
+      # Public, but a token is READ when one is sent — see `isFavorite`.
+      security: [{}, { bearerAuth: [] }]
+      summary: One ART, in full.
+      description: |
+        Every roster field, plus `bio`, `skills`, `languages` and `isFavorite`.
+
+        Called without a token `isFavorite` is `false`, never absent: a guest has
+        saved nothing, and an optional field would leave the profile screen to
+        decide what a missing value meant.
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+      responses:
+        '200':
+          description: The ART.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HelperDetail'
+              examples:
+                siti:
+                  value:
+                    id: siti
+                    name: Siti Aminah
+                    initials: SA
+                    avatarTone: sage
+                    categories: [masak, bersih]
+                    serviceLabel: Masak & Bersih-bersih
+                    experienceYears: 8
+                    rating: 4.9
+                    reviewCount: 86
+                    completedJobs: 210
+                    price: 90000
+                    priceUnit: kunjungan
+                    city: Salatiga
+                    availableDays: [1, 2, 3, 4, 5]
+                    idVerified: true
+                    backgroundChecked: true
+                    bio: Berpengalaman 8 tahun membantu keluarga muda.
+                    skills: [Masakan rumahan Jawa, Menyapu & mengepel]
+                    languages: [Bahasa Indonesia, Jawa]
+                    isFavorite: false
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /helpers/{helperId}/reviews:
+    parameters:
+      - name: helperId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: listHelperReviews
+      tags: [catalog]
+      security: []
+      summary: That ART's reviews, newest first.
+      description: |
+        Per-ART. One set of reviews shown identically on every profile — which is
+        what the app did before this contract — does not satisfy it.
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: A page of reviews. `total` equals that ART's reviewCount.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewPage'
+              examples:
+                page:
+                  value:
+                    items:
+                      - id: rev-1
+                        authorName: Bunda Sari
+                        authorInitials: BS
+                        authorTone: clay
+                        rating: 5
+                        createdAt: '2026-08-24T10:00:00+07:00'
+                        serviceLabel: Bersih-bersih
+                        tags: [Tepat waktu, Hasil rapi]
+                        text: Alhamdulillah sangat membantu.
+                        photoUrl: https://cdn.example.id/ulasan/rev-1.jpg
+                    total: 1
+                    limit: 20
+                    offset: 0
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /helpers/{helperId}/favorite:
+    parameters:
+      - name: helperId
+        in: path
+        required: true
+        schema: { type: string }
+    put:
+      operationId: saveHelper
+      tags: [catalog]
+      summary: Save this ART.
+      description: |
+        PUT rather than POST, and idempotent, because a double tap on a slow
+        connection must not be a different outcome from a single one.
+
+        The response carries the state AFTER the call, so a client never has to
+        infer the result from the verb it used.
+
+        Scoped to the customer AND to `X-Agency`: the same customer's saved set
+        under another agency is a different set.
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+      responses:
+        '200':
+          description: Saved. Already-saved is also a 200 — it is idempotent.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FavoriteState' }
+              examples:
+                saved: { value: { isFavorite: true } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    delete:
+      operationId: unsaveHelper
+      tags: [catalog]
+      summary: Unsave this ART.
+      description: |
+        Idempotent on the same terms as PUT. Unsaving something never saved is a
+        200, not a 404 — the caller asked for a state, and that state is the
+        result.
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+      responses:
+        '200':
+          description: Not saved. Was-never-saved is also a 200.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FavoriteState' }
+              examples:
+                unsaved: { value: { isFavorite: false } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  # =========================================================== identity ======
+  /auth/otp:
+    post:
+      operationId: requestOtp
+      tags: [identity]
+      security: []
+      summary: Send a four-digit code over WhatsApp.
+      description: |
+        Does NOT create an account — `name` is carried so that verification can,
+        and is ignored here.
+
+        The response deliberately does not reveal whether the number already has
+        an account. Login and registration are separate screens, but an attacker
+        must not be able to enumerate customers by comparing the two responses.
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone]
+              properties:
+                phone:
+                  type: string
+                  description: Local part, without the +62 prefix. 9-13 digits once spaces are stripped.
+                  examples: ['812 3456 7890']
+                name:
+                  type: [string, 'null']
+                  description: Supplied when registering, absent when signing in.
+      responses:
+        '202':
+          description: |
+            A code has been sent. The body never contains the code.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [expiresIn, resendAfter]
+                properties:
+                  expiresIn: { type: integer, description: Seconds. }
+                  resendAfter: { type: integer, description: Seconds. }
+              examples:
+                sent:
+                  value: { expiresIn: 300, resendAfter: 60 }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503':
+          description: |
+            The code could not be sent — the WhatsApp provider rejected it, or
+            this deployment has none configured.
+
+            Deliberately not a 202. A customer waiting for a code that was
+            never sent cannot tell that from a slow one, and neither can we; a
+            server that reports success for a message it did not deliver turns
+            an outage into a support ticket about a broken phone. The client
+            shows `message` and offers the resend it already has.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                undeliverable:
+                  value:
+                    error:
+                      code: otp_undeliverable
+                      message: Kode tidak dapat dikirim saat ini. Coba lagi sebentar lagi.
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /auth/verify:
+    post:
+      operationId: verifyOtp
+      tags: [identity]
+      security: []
+      summary: Exchange a code for a session.
+      description: |
+        The code is VERIFIED. Accepting any four digits — which is what the
+        screen did before this contract — does not satisfy it.
+
+        An account is created on first successful verification, taking `name`
+        when supplied.
+
+        When `name` is absent, null or blank the account is created WITHOUT a
+        name: `user.name` and `user.initials` come back absent. The server does
+        not substitute a placeholder — see `User.name` for why. The client's
+        answer is to stand a profile-completion screen between verification and
+        the app for as long as the name is missing.
+
+        Daftar collects a name and carries it here, so a customer who registered
+        never meets that screen. Masuk asks for a phone number and nothing else,
+        deliberately, so a customer who signed in always does.
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone, code]
+              properties:
+                phone: { type: string }
+                code: { type: string, pattern: '^\d{4}$' }
+                name: { type: [string, 'null'] }
+      responses:
+        '200':
+          description: Signed in.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, expiresAt, user, isNewAccount]
+                properties:
+                  token: { type: string }
+                  expiresAt: { $ref: '#/components/schemas/Instant' }
+                  user: { $ref: '#/components/schemas/User' }
+                  isNewAccount:
+                    type: boolean
+                    description: True when this call created the account.
+              examples:
+                signedIn:
+                  summary: A returning customer, who has a name.
+                  value:
+                    token: sess_7f3a9c
+                    expiresAt: '2026-12-07T14:32:00+07:00'
+                    isNewAccount: false
+                    user:
+                      id: cust-1
+                      name: Sari Wulandari
+                      initials: SW
+                      phone: '812 3456 7890'
+                      avatarTone: clay
+                      birthDate: '1992-04-17'
+                      gender: perempuan
+                newWithNoName:
+                  summary: |
+                    Signed in through Masuk, which sends no name. The account is
+                    created without one and the app must ask before going on.
+                  value:
+                    token: sess_91b2de
+                    expiresAt: '2026-12-07T14:32:00+07:00'
+                    isNewAccount: true
+                    user:
+                      id: cust-9
+                      phone: '813 5555 1234'
+                      avatarTone: steel
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401':
+          description: The code is wrong or expired.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                invalid:
+                  value: { error: { code: otp_invalid, message: Kode salah. Coba lagi. } }
+                expired:
+                  value: { error: { code: otp_expired, message: Kode sudah kedaluwarsa. } }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [identity]
+      summary: Revoke the presented token.
+      description: |
+        Idempotent: an expired or unknown token also returns 204, never 401.
+        Sign-out must never leave a customer stuck signed in.
+
+        The client additionally discards its cached profile, addresses and
+        orders — the device may be shared.
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+      responses:
+        '204': { description: Signed out. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /me:
+    get:
+      operationId: getMe
+      tags: [identity]
+      summary: The authenticated customer.
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+      responses:
+        '200':
+          description: The profile.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+              examples:
+                me:
+                  summary: A completed profile.
+                  value:
+                    id: cust-1
+                    name: Sari Wulandari
+                    initials: SW
+                    phone: '812 3456 7890'
+                    email: sari@contoh.id
+                    avatarTone: clay
+                    birthDate: '1992-04-17'
+                    gender: perempuan
+                    photoUrl: /uploads/up_3f81c2.jpg
+                noName:
+                  summary: |
+                    An account created by verifying a phone number with no name.
+                    `name` and `initials` are absent, not empty strings.
+                  value:
+                    id: cust-9
+                    phone: '813 5555 1234'
+                    avatarTone: steel
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    patch:
+      operationId: updateMe
+      tags: [identity]
+      summary: Edit the profile.
+      description: |
+        `initials` is NOT accepted: it is derived by the server from `name`, so
+        the two cannot drift apart.
+
+        Validation:
+
+          - `name`, when present, must be non-blank after trimming. A blank
+            value is a `422` and not a way to unset it: there is no operation
+            that removes a name once set, because there is no state a client
+            could show for a customer who un-named themselves.
+          - `birthDate` must be a valid calendar date, not in the future, and
+            not more than 120 years ago.
+          - `gender` must be one of the two `Gender` values.
+          - `photoUrl` must be a URL this deployment issued from `POST
+            /uploads`. An arbitrary external URL is a `422`.
+
+        `birthDate`, `gender` and `photoUrl` each accept `null` to clear them.
+        All three are volunteered, and a customer who volunteered one may
+        withdraw it.
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                name: { type: string }
+                phone: { type: string }
+                email: { type: string }
+                # `type: [x, 'null']`, not `nullable: true`: this is OpenAPI
+                # 3.1, which dropped that keyword. Written the 3.0 way it is
+                # silently ignored, and the generated types say the field can
+                # never be null — while the server accepts null to CLEAR it.
+                birthDate: { type: [string, 'null'], format: date }
+                gender:
+                  oneOf:
+                    - $ref: '#/components/schemas/Gender'
+                    - type: 'null'
+                photoUrl: { type: [string, 'null'] }
+      responses:
+        '200':
+          description: The updated profile, with `initials` recomputed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+              examples:
+                renamed:
+                  summary: |
+                    Naming a customer for the first time. `initials` is
+                    recomputed by the server and arrives with the name.
+                  value:
+                    id: cust-9
+                    name: Sari Wulandari
+                    initials: SW
+                    phone: '813 5555 1234'
+                    avatarTone: steel
+                    birthDate: '1992-04-17'
+                    gender: perempuan
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          description: |
+            The phone number is the identity and cannot be edited as a display
+            field.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                phoneChange:
+                  value:
+                    error:
+                      code: phone_change_requires_verification
+                      message: Nomor WhatsApp harus diverifikasi ulang.
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /addresses:
+    get:
+      operationId: listAddresses
+      tags: [identity]
+      summary: The customer's addresses, primary first.
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: A page of addresses.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AddressPage' }
+              examples:
+                page:
+                  value:
+                    items:
+                      - id: addr-1
+                        label: Rumah
+                        city: Salatiga
+                        detail: Jl. Diponegoro No. 24, RT 02 / RW 05
+                        landmark: Depan Masjid Al-Ikhlas
+                        isPrimary: true
+                    total: 1
+                    limit: 20
+                    offset: 0
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    post:
+      operationId: createAddress
+      tags: [identity]
+      summary: Save an address.
+      description: |
+        The first address saved becomes the primary one — a customer with exactly
+        one address should never have to choose it. `isPrimary` is not accepted
+        here; `POST /addresses/{id}/primary` is the only way to move it.
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AddressInput' }
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Address' }
+              examples:
+                created:
+                  value:
+                    id: addr-2
+                    label: Kantor
+                    city: Salatiga
+                    detail: Jl. Jenderal Sudirman No. 110
+                    isPrimary: false
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /addresses/{addressId}:
+    parameters:
+      - name: addressId
+        in: path
+        required: true
+        schema: { type: string }
+    patch:
+      operationId: updateAddress
+      tags: [identity]
+      summary: Edit an address.
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                label: { type: string }
+                city: { type: string }
+                detail: { type: string }
+                landmark: { type: string }
+      responses:
+        '200':
+          description: The updated address.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Address' }
+              examples:
+                updated:
+                  value:
+                    id: addr-1
+                    label: Rumah
+                    city: Salatiga
+                    detail: Jl. Diponegoro No. 24
+                    isPrimary: true
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    delete:
+      operationId: deleteAddress
+      tags: [identity]
+      summary: Remove an address.
+      description: |
+        Deleting the primary one promotes the next, so the customer is never left
+        holding addresses with no default.
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+      responses:
+        '204': { description: Deleted. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /addresses/{addressId}/primary:
+    parameters:
+      - name: addressId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: makeAddressPrimary
+      tags: [identity]
+      summary: Make this the primary address.
+      description: |
+        Exactly one address is primary. This sets it and clears every other one
+        in the same operation.
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+      responses:
+        '200':
+          description: The promoted address.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Address' }
+              examples:
+                promoted:
+                  value:
+                    id: addr-2
+                    label: Kantor
+                    city: Salatiga
+                    detail: Jl. Jenderal Sudirman No. 110
+                    isPrimary: true
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  # ============================================================ booking ======
+  /bookings/quote:
+    post:
+      operationId: quoteBooking
+      tags: [booking]
+      security: []
+      summary: Price a prospective booking.
+      description: |
+        **The only place a total is computed.** The service fee is determined by
+        the server from the ART's price unit; no client computes a fee, a
+        discount or a total. The pricing helpers that used to live in the app
+        have no counterpart on the client.
+
+        Public, because the booking wizard shows a total before the login wall.
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/QuoteInput' }
+      responses:
+        '200':
+          description: The price.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Quote' }
+              examples:
+                plain:
+                  summary: A single visit, no voucher
+                  value: { base: 95000, serviceFee: 5000, discount: 0, total: 100000, voucher: null }
+                voucher:
+                  summary: 50% off, capped at Rp50.000
+                  value:
+                    base: 95000
+                    serviceFee: 5000
+                    discount: 47500
+                    total: 52500
+                    voucher: { code: HUMAIRA50, title: Diskon 50% Pengguna Baru, amount: 47500 }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /vouchers:
+    get:
+      operationId: listVouchers
+      tags: [booking]
+      summary: Vouchers available for a booking.
+      description: |
+        A voucher's discount type, percentage, cap and minimum spend are NOT on
+        the wire. The client has no use for the arithmetic — the quote returns
+        the amount — and shipping the rules invites a second, disagreeing
+        implementation.
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+        - name: helperId
+          in: query
+          required: false
+          schema: { type: string }
+        - name: categoryId
+          in: query
+          required: false
+          schema: { type: string }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: |
+            A page of vouchers. When `helperId` and `categoryId` are both given,
+            each carries its eligibility for that specific booking.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VoucherPage' }
+              examples:
+                page:
+                  value:
+                    items:
+                      - code: HUMAIRA50
+                        title: Diskon 50% Pengguna Baru
+                        description: Potongan 50% hingga Rp50.000 untuk pesanan pertama
+                        icon: ph-fill ph-confetti
+                        tone: promo
+                        eligible: true
+                      - code: RUTIN100
+                        title: Potongan Rp100.000
+                        description: Untuk pesanan minimal Rp500.000
+                        icon: ph-fill ph-calendar-heart
+                        tone: recurring
+                        eligible: false
+                        ineligibleReason: Minimal transaksi Rp500.000
+                    total: 2
+                    limit: 20
+                    offset: 0
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /vouchers/validate:
+    post:
+      operationId: validateVoucher
+      tags: [booking]
+      summary: Check a hand-typed code.
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string }
+                helperId: { type: string }
+                categoryId: { type: string }
+      responses:
+        '200':
+          description: The voucher, with its eligibility.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Voucher' }
+              examples:
+                ok:
+                  value:
+                    code: HUMAIRA50
+                    title: Diskon 50% Pengguna Baru
+                    description: Potongan 50% hingga Rp50.000
+                    icon: ph-fill ph-confetti
+                    tone: promo
+                    eligible: true
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: No such code.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                unknown:
+                  value:
+                    error:
+                      code: voucher_not_found
+                      message: Kode voucher tidak ditemukan.
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /orders:
+    get:
+      operationId: listOrders
+      tags: [booking]
+      summary: The customer's orders, newest first.
+      description: |
+        By default EXCLUDES `menunggu_pembayaran`, so an abandoned checkout does
+        not appear among a customer's bookings. `status` can ask for them.
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+        - name: status
+          in: query
+          required: false
+          description: Comma-separated statuses to include.
+          schema: { type: string }
+          examples:
+            active: { value: 'menunggu,dikonfirmasi,berlangsung' }
+            history: { value: 'selesai,dibatalkan' }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: A page of orders.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderPage' }
+              examples:
+                page:
+                  value:
+                    items: []
+                    total: 0
+                    limit: 20
+                    offset: 0
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    post:
+      operationId: createOrder
+      tags: [booking]
+      summary: Create an order, unpaid.
+      description: |
+        Returns the order AND its payment instructions. The order is created
+        `menunggu_pembayaran` and moves to `menunggu` only when its payment
+        settles — **an order is never created already paid**, because no payment
+        provider works that way.
+
+        The server re-prices on creation and does not accept a total, fee or
+        discount from the client.
+
+        Refused `409 agency_not_accepting` when the agency has paused new
+        bookings, BEFORE the payment provider is called and before any row is
+        written — so a refused booking leaves nothing behind and charges nobody.
+        A 409 rather than a 403: the customer lacks no permission, the agency is
+        closed today. The screen showing its own explanation is not the guard;
+        this is. A bundle in an open tab can be older than the agency's decision.
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OrderInput' }
+      responses:
+        '201':
+          description: Created, awaiting payment.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [order, payment]
+                properties:
+                  order: { $ref: '#/components/schemas/Order' }
+                  payment: { $ref: '#/components/schemas/Payment' }
+              examples:
+                qris:
+                  value:
+                    order:
+                      id: ord_a1
+                      reference: HC-820471
+                      status: menunggu_pembayaran
+                      categoryId: bersih
+                      serviceLabel: Bersih-bersih
+                      schedule: { type: sekali, days: [1], time: '08:00' }
+                      helper: { id: siti, name: Siti Aminah, initials: SA, avatarTone: sage }
+                      address:
+                        city: Salatiga
+                        detail: Jl. Diponegoro No. 24
+                        landmark: Depan Masjid Al-Ikhlas
+                      contactPhone: '812 3456 7890'
+                      notes: Fokus dapur
+                      pricing:
+                        base: 95000
+                        serviceFee: 5000
+                        discount: 0
+                        total: 100000
+                        voucher: null
+                      paymentMethod: { id: qris, label: QRIS }
+                      statusHistory:
+                        - { status: menunggu_pembayaran, at: '2026-09-07T09:10:00+07:00' }
+                      canCancel: true
+                      canReview: false
+                      createdAt: '2026-09-07T09:10:00+07:00'
+                    payment:
+                      id: pay_b2
+                      method: qris
+                      status: pending
+                      expiresAt: '2026-09-07T09:25:00+07:00'
+                      qrisPayload: 00020101021126...
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          description: |
+            The agency has paused new bookings. Nothing was created and no
+            payment was initiated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                notAccepting:
+                  value:
+                    error:
+                      code: agency_not_accepting
+                      message: Agensi ini sedang tidak menerima pesanan baru.
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /orders/{orderId}:
+    parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getOrder
+      tags: [booking]
+      summary: One order.
+      description: |
+        Includes `statusHistory`, so the tracker renders from recorded fact
+        rather than from a guess about the current status's position.
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+      responses:
+        '200':
+          description: The order.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+              examples:
+                confirmed:
+                  value:
+                    id: ord_a1
+                    reference: HC-820471
+                    status: dikonfirmasi
+                    categoryId: bersih
+                    serviceLabel: Bersih-bersih
+                    schedule: { type: sekali, days: [1], time: '08:00' }
+                    helper: { id: siti, name: Siti Aminah, initials: SA, avatarTone: sage }
+                    address: { city: Salatiga, detail: Jl. Diponegoro No. 24 }
+                    contactPhone: '812 3456 7890'
+                    pricing: { base: 95000, serviceFee: 5000, discount: 0, total: 100000, voucher: null }
+                    paymentMethod: { id: qris, label: QRIS }
+                    paidAt: '2026-09-07T09:14:00+07:00'
+                    statusHistory:
+                      - { status: menunggu, at: '2026-09-07T09:14:00+07:00' }
+                      - { status: dikonfirmasi, at: '2026-09-07T10:02:00+07:00' }
+                    canCancel: false
+                    canReview: false
+                    createdAt: '2026-09-07T09:10:00+07:00'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /orders/{orderId}/cancel:
+    parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: cancelOrder
+      tags: [booking]
+      summary: Cancel, while the order still can be.
+      description: |
+        Permitted only from `menunggu` and `menunggu_pembayaran`. Whether an
+        order can be cancelled is the server's determination — the order carries
+        `canCancel` so the app shows the button from the response rather than
+        from its own copy of the rule.
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  description: One of the reference `cancelReasons`.
+      responses:
+        '200':
+          description: Cancelled.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+              examples:
+                cancelled:
+                  value:
+                    id: ord_a1
+                    reference: HC-820471
+                    status: dibatalkan
+                    cancelReason: Sudah tidak butuh
+                    categoryId: bersih
+                    serviceLabel: Bersih-bersih
+                    schedule: { type: sekali, days: [1], time: '08:00' }
+                    helper: { id: siti, name: Siti Aminah, initials: SA, avatarTone: sage }
+                    address: { city: Salatiga, detail: Jl. Diponegoro No. 24 }
+                    contactPhone: '812 3456 7890'
+                    pricing: { base: 95000, serviceFee: 5000, discount: 0, total: 100000, voucher: null }
+                    paymentMethod: { id: qris, label: QRIS }
+                    statusHistory:
+                      - { status: menunggu, at: '2026-09-07T09:14:00+07:00' }
+                      - { status: dibatalkan, at: '2026-09-07T11:00:00+07:00' }
+                    canCancel: false
+                    canReview: false
+                    createdAt: '2026-09-07T09:10:00+07:00'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /orders/{orderId}/review:
+    parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: createReview
+      tags: [booking]
+      summary: Review a completed order.
+      description: |
+        Permitted only from `selesai`. Attaches the review to both the order and
+        the ART who did the work, and moves that ART's rating.
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReviewInput' }
+      responses:
+        '201':
+          description: Reviewed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderReview' }
+              examples:
+                created:
+                  value:
+                    rating: 5
+                    tags: [Tepat waktu, Hasil rapi]
+                    text: Sangat membantu, kerjanya rapi.
+                    createdAt: '2026-09-09T18:00:00+07:00'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Not finished, or already reviewed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                notReviewable:
+                  value:
+                    error:
+                      code: order_not_reviewable
+                      message: Ulasan bisa diberi setelah pesanan selesai.
+                exists:
+                  value:
+                    error:
+                      code: review_exists
+                      message: Anda sudah memberi ulasan untuk pesanan ini.
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    patch:
+      operationId: updateReview
+      tags: [booking]
+      summary: Change a review.
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReviewInput' }
+      responses:
+        '200':
+          description: The updated review.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderReview' }
+              examples:
+                updated:
+                  value:
+                    rating: 4
+                    tags: [Teliti]
+                    text: Baik, sempat telat sedikit.
+                    createdAt: '2026-09-09T18:00:00+07:00'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /uploads:
+    post:
+      operationId: createUpload
+      tags: [booking]
+      summary: Upload one image and get a URL back.
+      description: |
+        The upload is a SEPARATE operation from the thing that references it, and
+        everything that takes a photo takes the URL rather than the bytes.
+
+        A review is otherwise a small JSON document; making it `multipart` so one
+        optional field could carry bytes would have changed the shape of the
+        common case for the sake of the rare one.
+
+        The returned URL is readable WITHOUT authentication — a review's photo
+        renders on a public ART profile.
+
+        An uploaded file nothing ever references is the server's to collect. No
+        client call deletes one: a URL already embedded in a review must not be
+        removable by whoever holds it.
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: JPEG, PNG or WebP. At most 5 MB.
+      responses:
+        '201':
+          description: Stored.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url]
+                properties:
+                  url: { type: string, format: uri }
+              examples:
+                stored:
+                  value: { url: 'https://cdn.example.id/ulasan/9f2c.jpg' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '413':
+          description: Over 5 MB.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                tooLarge:
+                  value:
+                    error:
+                      code: file_too_large
+                      message: Ukuran foto maksimal 5 MB.
+        '415':
+          description: Not an image this endpoint accepts.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                unsupported:
+                  value:
+                    error:
+                      code: unsupported_media_type
+                      message: Format foto harus JPG, PNG, atau WebP.
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /payments/{paymentId}:
+    parameters:
+      - name: paymentId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getPayment
+      tags: [booking]
+      summary: The current state of a payment.
+      description: |
+        **Settlement is the server's to declare.** No client call marks a payment
+        paid — there is deliberately no such operation anywhere in this document.
+        "Saya Sudah Bayar" is a request to re-read this, nothing more.
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+      responses:
+        '200':
+          description: The payment.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Payment' }
+              examples:
+                pending:
+                  value:
+                    id: pay_b2
+                    method: qris
+                    status: pending
+                    expiresAt: '2026-09-07T09:25:00+07:00'
+                    qrisPayload: 00020101021126...
+                paid:
+                  value:
+                    id: pay_b2
+                    method: qris
+                    status: paid
+                    expiresAt: '2026-09-07T09:25:00+07:00'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  # ============================================================== agensi ======
+  # Every operation below resolves its agency from the staff member's TOKEN. The
+  # rejected alternative was resolving it from `X-Agency`: that makes an
+  # authorisation decision a client input, and one bug in the app is a
+  # cross-tenant write.
+  #
+  # None of these takes the required AgencyHeader the customer operations do.
+  # They take `AgencyAssertion` — the same header, OPTIONAL, and checked rather
+  # than obeyed. The agent app sends its own slug;
+  # a slug naming any other agency is `401 session_expired`, byte-identical to a
+  # token that was never issued. The header narrows; it never selects.
+  #
+  # That the agency is never SELECTED from a client input here is deliberate and
+  # is asserted by a test, not left to review.
+
+  /agensi/auth/otp:
+    parameters:
+      - $ref: '#/components/parameters/AgencyAssertion'
+    post:
+      operationId: requestStaffOtp
+      tags: [agensi]
+      security: []
+      summary: Send a four-digit code to an agency staff member.
+      description: |
+        The same port, the same rate limits and the same 503 as the customer's
+        code request — a deployment with no WhatsApp provider cannot sign an
+        agency in either, and says so rather than pretending.
+
+        The response does NOT reveal whether the number staffs an agency.
+        Telling an unknown number apart from a known one here would make this
+        an endpoint for discovering who works where.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone]
+              properties:
+                phone:
+                  type: string
+                  description: Local part, without the +62 prefix.
+                  examples: ['812 3456 7890']
+      responses:
+        '202':
+          description: A code has been sent, if that number staffs an agency.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [expiresIn, resendAfter]
+                properties:
+                  expiresIn: { type: integer, description: Seconds. }
+                  resendAfter: { type: integer, description: Seconds. }
+              examples:
+                sent:
+                  value: { expiresIn: 300, resendAfter: 60 }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503':
+          description: |
+            The code could not be sent. Identical in shape and reasoning to the
+            customer's 503 — see `POST /auth/otp`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                undeliverable:
+                  value:
+                    error:
+                      code: otp_undeliverable
+                      message: Kode tidak dapat dikirim saat ini. Coba lagi sebentar lagi.
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /agensi/auth/verify:
+    parameters:
+      - $ref: '#/components/parameters/AgencyAssertion'
+    post:
+      operationId: verifyStaffOtp
+      tags: [agensi]
+      security: []
+      summary: Exchange a code for an agency session.
+      description: |
+        Creates nothing. Unlike the customer's verification, which creates an
+        account on first use, a staff member must already have been added by
+        their agency's `pemilik` or by a platform operator — an agency cannot
+        bring itself into existence.
+
+        A number that staffs nothing is told so ONLY after the code is correct,
+        so this cannot be used to enumerate who works where.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone, code]
+              properties:
+                phone: { type: string }
+                code: { type: string, pattern: '^\d{4}$' }
+      responses:
+        '200':
+          description: Signed in. The agency comes from the binding, not from the request.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, expiresAt, staff]
+                properties:
+                  token: { type: string }
+                  expiresAt: { $ref: '#/components/schemas/Instant' }
+                  staff: { $ref: '#/components/schemas/Staff' }
+              examples:
+                signedIn:
+                  value:
+                    token: agen_7f3a9c
+                    expiresAt: '2026-12-07T14:32:00+07:00'
+                    staff:
+                      id: staff-1
+                      name: Rina Hartati
+                      phone: '811 2233 4455'
+                      role: pemilik
+                      agency: { slug: humaira, name: Agensi Humaira }
+        '401':
+          description: The code is wrong or expired.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                invalid:
+                  value: { error: { code: otp_invalid, message: Kode salah. Coba lagi. } }
+                expired:
+                  value: { error: { code: otp_expired, message: Kode sudah kedaluwarsa. } }
+        '403':
+          description: |
+            The code was right, and the number either staffs no agency or staffs
+            a DIFFERENT one from the bundle that sent the code. Deliberately
+            AFTER the code check: before it, this response would enumerate.
+
+            `staff_other_agency` names no agency. The bundle already displays
+            the one it is for, and naming the other would turn sign-in into a
+            lookup of where a number works. It is distinct from `not_staff`
+            because only the owner of the number can reach the distinction, and
+            telling them they staff nothing while they hold a working account
+            sends them to support instead of to their own agency's app.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                notStaff:
+                  value:
+                    error:
+                      code: not_staff
+                      message: Nomor ini tidak terdaftar sebagai staf agensi.
+                otherAgency:
+                  value:
+                    error:
+                      code: staff_other_agency
+                      message: Akun ini terdaftar di agensi lain. Gunakan aplikasi agensi Anda.
+                suspended:
+                  value:
+                    error:
+                      code: agency_suspended
+                      message: Agensi Anda sedang tidak aktif. Hubungi kami.
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /agensi/auth/logout:
+    parameters:
+      - $ref: '#/components/parameters/AgencyAssertion'
+    post:
+      operationId: logoutStaff
+      tags: [agensi]
+      summary: Revoke this agency session.
+      responses:
+        '204': { description: 'Revoked. Revoking an already-revoked token is not an error.' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /agensi/me:
+    parameters:
+      - $ref: '#/components/parameters/AgencyAssertion'
+    get:
+      operationId: getStaffProfile
+      tags: [agensi]
+      summary: Who this token belongs to, and which agency.
+      description: |
+        What the agent app calls on load to restore a session. Without it a held
+        token could authenticate requests but the app would not know whose
+        agency it is showing until the next sign-in.
+      responses:
+        '200':
+          description: The signed-in staff member.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Staff' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /agensi/agency:
+    parameters:
+      - $ref: '#/components/parameters/AgencyAssertion'
+    get:
+      operationId: getOwnAgency
+      tags: [agensi]
+      summary: This agency's own profile, as its customers read it.
+      description: |
+        The same document `GET /agency` serves, resolved from the SESSION rather
+        than from a header.
+
+        A second path for the same shape, and not redundancy: `GET /agency` is
+        customer-tagged, and an agent token presented to a customer operation is
+        `401 session_expired` — deliberately indistinguishable from one that was
+        never issued. So the agent app cannot read the customer path at all, and
+        the alternative would be an app that drops its own Authorization header
+        for one request, which is a hole waiting for a second caller.
+      responses:
+        '200':
+          description: The agency profile.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Agency' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    patch:
+      operationId: updateAgencyProfile
+      tags: [agensi]
+      summary: Change what this agency says about itself.
+      description: |
+        Five fields, and the interesting part is the rest.
+
+        `acceptingBookings` is the fifth, and the only one gated by role: a
+        `pemilik` may send it, a `staf` is refused `403 forbidden`, and a refused
+        request writes nothing at all.
+
+        DERIVED, and refused if sent: `rating`, `reviewCount`,
+        `activeHelperCount`, `completedJobs`. Same rule as `HelperInput` and as
+        `PricingService` — an accepted derived field is how a second
+        implementation of the same arithmetic gets written, and the second one
+        disagrees.
+
+        THE OPERATOR'S, and refused if sent: `since`, `guarantee`, `checks`,
+        `promo`, `whatsapp`. `guarantee` and `checks` are what a customer reads
+        as this PLATFORM's vouching; an agency that could type them could
+        publish any claim under the platform's name. The other three are out of
+        band only because no screen asks for them.
+
+        The agency is the session's. There is no path parameter and no body
+        field naming one.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AgencyPatch' }
+      responses:
+        '200':
+          description: The whole updated profile, as `GET /agency` serves it.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Agency' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422':
+          description: |
+            Invalid, or carrying a field this operation does not accept —
+            answered BY NAME rather than as a generic malformed body, so the
+            client learns which field the server decides.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                derived:
+                  value:
+                    error:
+                      code: validation_failed
+                      message: Rating dihitung dari ulasan dan tidak bisa diubah.
+                      field: rating
+                operator:
+                  value:
+                    error:
+                      code: validation_failed
+                      message: Garansi hanya bisa diubah oleh tim platform.
+                      field: guarantee
+                blank:
+                  value:
+                    error:
+                      code: validation_failed
+                      message: Nama agensi tidak boleh kosong.
+                      field: name
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /agensi/staff:
+    parameters:
+      - $ref: '#/components/parameters/AgencyAssertion'
+    get:
+      operationId: listStaff
+      tags: [agensi]
+      summary: The agency's own staff accounts.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: This agency's staff, and no other's.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StaffPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    post:
+      operationId: addStaff
+      tags: [agensi]
+      summary: Add a staff account. `pemilik` only.
+      description: |
+        By phone number and role. No password, name or email: the phone number
+        IS the credential, exactly as it is for a customer.
+
+        The account is usable immediately — the person signs in with a code sent
+        to that number.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [phone, role]
+              properties:
+                phone: { type: string }
+                role: { $ref: '#/components/schemas/StaffRole' }
+      responses:
+        '201':
+          description: Added.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Staff' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: |
+            That number already staffs an agency — this one or another. A person
+            staffs exactly one agency; a person works for
+            exactly one agency.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                bound:
+                  value:
+                    error:
+                      code: staff_already_bound
+                      message: Nomor ini sudah terdaftar sebagai staf agensi.
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /agensi/staff/{staffId}:
+    parameters:
+      - $ref: '#/components/parameters/AgencyAssertion'
+      - name: staffId
+        in: path
+        required: true
+        schema: { type: string }
+    patch:
+      operationId: updateStaffRole
+      tags: [agensi]
+      summary: Change a staff member's role. `pemilik` only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [role]
+              properties:
+                role: { $ref: '#/components/schemas/StaffRole' }
+      responses:
+        '200':
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Staff' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/LastPemilik' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    delete:
+      operationId: removeStaff
+      tags: [agensi]
+      summary: Remove a staff account. `pemilik` only.
+      description: |
+        Their live sessions are revoked IMMEDIATELY, not left to expire. A
+        departing employee whose access ends "within thirty days" has not had
+        their access ended.
+      responses:
+        '204': { description: 'Removed, and every session it held is revoked.' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/LastPemilik' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /agensi/orders:
+    parameters:
+      - $ref: '#/components/parameters/AgencyAssertion'
+    get:
+      operationId: listAgencyOrders
+      tags: [agensi]
+      summary: The agency's queue.
+      description: |
+        Orders in `menunggu_pembayaran` are ABSENT unless asked for by name. The
+        agency has nothing to do with an order nobody has paid for, and showing
+        it in the default queue invites confirming one.
+      parameters:
+        - name: status
+          in: query
+          description: |
+            Filter to one or more statuses. Absent means every status except
+            `menunggu_pembayaran`.
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/OrderStatus' }
+          style: form
+          explode: false
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: This agency's orders, newest first.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgencyOrderPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /agensi/orders/{orderId}:
+    parameters:
+      - $ref: '#/components/parameters/AgencyAssertion'
+      - name: orderId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getAgencyOrder
+      tags: [agensi]
+      summary: One order, in full.
+      responses:
+        '200':
+          description: The order.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgencyOrder' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /agensi/orders/{orderId}/confirm:
+    parameters:
+      - $ref: '#/components/parameters/AgencyAssertion'
+      - name: orderId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: confirmOrder
+      tags: [agensi]
+      summary: '`menunggu` → `dikonfirmasi`.'
+      description: |
+        Each transition is its own operation and each declares the status it
+        expects, so a step cannot be skipped and the refusal names where the
+        order actually is.
+
+        A conditional write guarded on the status that was READ. Two staff
+        members with the queue open on two phones is a likelier race than two
+        worker passes ever were, and a plain write doubles the order's history —
+        a defect this codebase has already had once.
+      responses:
+        '200':
+          description: Confirmed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgencyOrder' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/OrderStatusConflict' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /agensi/orders/{orderId}/start:
+    parameters:
+      - $ref: '#/components/parameters/AgencyAssertion'
+      - name: orderId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: startOrder
+      tags: [agensi]
+      summary: '`dikonfirmasi` → `berlangsung`.'
+      responses:
+        '200':
+          description: Started.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgencyOrder' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/OrderStatusConflict' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /agensi/orders/{orderId}/complete:
+    parameters:
+      - $ref: '#/components/parameters/AgencyAssertion'
+      - name: orderId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: completeOrder
+      tags: [agensi]
+      summary: '`berlangsung` → `selesai`.'
+      description: |
+        The last transition. `selesai` is what makes the order reviewable, so
+        this is also what puts the review prompt in front of the customer.
+      responses:
+        '200':
+          description: Completed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgencyOrder' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/OrderStatusConflict' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /agensi/orders/{orderId}/helper:
+    parameters:
+      - $ref: '#/components/parameters/AgencyAssertion'
+      - name: orderId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: assignOrderHelper
+      tags: [agensi]
+      summary: Assign or reassign the ART.
+      description: |
+        Permitted while the order is `menunggu` or `dikonfirmasi`. Once it is
+        `berlangsung` the ART is at the address and this is refused.
+
+        Replaces the order's ART SNAPSHOT and nothing else. The pricing stays
+        frozen: the customer booked a price, and an agency sending a different
+        worker does not get to reprice it — which is the whole reason an order
+        copies rather than points.
+
+        Appends a status-history entry, so the customer's tracker shows the
+        change rather than silently displaying a different name than the one
+        they booked.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [helperId]
+              properties:
+                helperId: { type: string }
+      responses:
+        '200':
+          description: Reassigned.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgencyOrder' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: |
+            No such order, or no such ART on THIS agency's roster. Another
+            agency's ART is a 404 and not a 403, because a 403 confirms the id
+            is real.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                notFound:
+                  value: { error: { code: not_found, message: Tidak ditemukan. } }
+        '409':
+          description: The order has started, or is no longer live.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                started:
+                  value:
+                    error:
+                      code: order_not_reassignable
+                      message: Pesanan sudah berlangsung, ART tidak bisa diganti.
+        '422':
+          description: The ART exists on this roster and cannot take this order.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                retired:
+                  value:
+                    error:
+                      code: art_not_eligible
+                      message: ART ini sudah tidak aktif.
+                wrongCategory:
+                  value:
+                    error:
+                      code: art_not_eligible
+                      message: ART ini tidak melayani kategori tersebut.
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /agensi/orders/{orderId}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/AgencyAssertion'
+      - name: orderId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: cancelOrderByAgency
+      tags: [agensi]
+      summary: Cancel, with a reason the customer will read.
+      description: |
+        `reason` is REQUIRED and free text, unlike the customer's cancellation
+        which picks from a reference list. An agency's reasons are its own and
+        the customer reads them verbatim; an agency cancelling without saying
+        why leaves someone with a dead booking and no explanation.
+
+        Cancelling a paid order does NOT move money. Refunds belong to the
+        payment provider, which is unchosen — the order records that it was
+        cancelled after payment and settlement stays where it is.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 1 }
+      responses:
+        '200':
+          description: Cancelled.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgencyOrder' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Already finished.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                done:
+                  value:
+                    error:
+                      code: order_not_cancellable
+                      message: Pesanan ini sudah tidak bisa dibatalkan.
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /agensi/helpers:
+    parameters:
+      - $ref: '#/components/parameters/AgencyAssertion'
+    get:
+      operationId: listAgencyHelpers
+      tags: [agensi]
+      summary: The agency's own roster, retired ART included.
+      description: |
+        Unlike the public `GET /helpers`, this shows retired ART too — an agency
+        managing its roster needs to see who it has retired in order to restore
+        them.
+      parameters:
+        - name: includeRetired
+          in: query
+          description: Default false, so the common view matches the public roster.
+          schema: { type: boolean, default: false }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: This agency's ART.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgencyHelperPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    post:
+      operationId: createHelper
+      tags: [agensi]
+      summary: Add an ART to the roster.
+      description: |
+        Live on the public catalog on the next request. There is no draft state
+        and no approval step: an agency's roster is its own, exactly as its
+        rating and its promotion already are.
+
+        The server assigns the public id. No client supplies one.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HelperInput' }
+      responses:
+        '201':
+          description: Created, and already on the public roster.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgencyHelper' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422':
+          description: |
+            Invalid, or carrying a field the SERVER derives. `rating`,
+            `reviewCount`, `completedJobs`, `age` and `initials` are refused
+            rather than ignored — a silently dropped field is indistinguishable
+            from a stored one until someone reads it back.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                derived:
+                  value:
+                    error:
+                      code: validation_failed
+                      message: Nilai ini ditentukan oleh sistem.
+                      field: rating
+                foreignPhoto:
+                  value:
+                    error:
+                      code: validation_failed
+                      message: Foto harus diunggah lewat aplikasi ini.
+                      field: photoUrl
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /agensi/helpers/{helperId}:
+    parameters:
+      - $ref: '#/components/parameters/AgencyAssertion'
+      - name: helperId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getAgencyHelper
+      tags: [agensi]
+      summary: One ART on this agency's roster.
+      responses:
+        '200':
+          description: The ART.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgencyHelper' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    patch:
+      operationId: updateHelper
+      tags: [agensi]
+      summary: Edit an ART. Live immediately.
+      description: |
+        Absent fields are unchanged. Changing `price` does NOT alter any
+        existing order: an order froze its pricing at creation, and a price
+        change that rewrote what someone was already charged is the defect the
+        snapshot exists to prevent.
+
+        `initials` follows `name` and cannot be set, so an ART's avatar cannot
+        disagree with their name.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HelperPatch' }
+      responses:
+        '200':
+          description: Updated, and live on the public profile.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgencyHelper' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: Invalid, or carrying a derived field. See `POST /agensi/helpers`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /agensi/helpers/{helperId}/retire:
+    parameters:
+      - $ref: '#/components/parameters/AgencyAssertion'
+      - name: helperId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: retireHelper
+      tags: [agensi]
+      summary: Take an ART off the roster, keeping their history.
+      description: |
+        Retired, never deleted. `Order` holds a real reference to `Helper` so a
+        review attaches to the right person; removing the row orphans both the
+        reviews and the orders.
+
+        Refused while the ART has live work. The rejected alternative was
+        cascading — auto-cancelling their active orders — which is a decision
+        with a customer on the other end of it, and the server making it
+        silently is how someone's booking disappears without explanation. The
+        agency reassigns or cancels first, which it now has operations for.
+      responses:
+        '200':
+          description: Retired. Off the public roster, unbookable, unassignable.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgencyHelper' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: |
+            They have orders in `menunggu`, `dikonfirmasi` or `berlangsung`.
+            `error.details.activeOrderCount` carries how many.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                busy:
+                  value:
+                    error:
+                      code: art_has_active_orders
+                      message: ART ini masih punya pesanan berjalan.
+                      details: { activeOrderCount: 2 }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /agensi/helpers/{helperId}/restore:
+    parameters:
+      - $ref: '#/components/parameters/AgencyAssertion'
+      - name: helperId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: restoreHelper
+      tags: [agensi]
+      summary: Put a retired ART back on the roster.
+      responses:
+        '200':
+          description: Restored, and bookable again.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgencyHelper' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /agensi/helpers/{helperId}/documents:
+    parameters:
+      - $ref: '#/components/parameters/AgencyAssertion'
+      - name: helperId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: listHelperDocuments
+      tags: [agensi]
+      summary: What is attached to this ART.
+      description: |
+        Metadata only, and never more than one of each type.
+      responses:
+        '200':
+          description: The attached documents, newest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/HelperDocument' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    post:
+      operationId: attachHelperDocument
+      tags: [agensi]
+      summary: Attach one identity document to an ART.
+      description: |
+        A KTP, an SKCK or a health certificate. NOT an upload: this file is
+        private, and the difference is the whole point.
+
+        `POST /uploads` and `POST /agensi/uploads` mint a URL readable WITHOUT
+        authentication, because what they store renders on a public ART profile.
+        A KTP behind such a URL is a KTP on the internet: the URL is
+        unguessable, not secret, and anyone who ever holds one holds the file
+        forever with no request left to refuse.
+
+        So no URL is minted here, none is returned, and the bytes come back only
+        from the `/file` sub-resource, to a staff member of the owning agency.
+
+        One current document per type. Attaching a second of a type REPLACES the
+        first, and the replaced bytes become the server's to collect.
+
+        *Rejected:* signed expiring URLs. Better than public and still worse than
+        this — a signing scheme, a clock skew and a key to rotate, to save a
+        round trip for a caller already sending a bearer token, with no CDN in
+        front of the service to justify the indirection.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, type]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                type: { $ref: '#/components/schemas/HelperDocumentType' }
+      responses:
+        '201':
+          description: Attached. Carries no URL, because none exists.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HelperDocument' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413':
+          description: Over 5 MB.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                tooLarge:
+                  value:
+                    error:
+                      code: file_too_large
+                      message: Ukuran dokumen maksimal 5 MB.
+        '415':
+          description: |
+            Not a document this endpoint accepts. PDF is accepted here and not
+            for photos: an SKCK and a health certificate are commonly issued and
+            scanned as one.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                unsupported:
+                  value:
+                    error:
+                      code: unsupported_media_type
+                      message: Format dokumen harus JPG, PNG, WebP, atau PDF.
+        '422':
+          description: A `type` outside the three.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                type:
+                  value:
+                    error:
+                      code: validation_failed
+                      message: Jenis dokumen tidak dikenali.
+                      field: type
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /agensi/helpers/{helperId}/documents/{documentId}:
+    parameters:
+      - $ref: '#/components/parameters/AgencyAssertion'
+      - name: helperId
+        in: path
+        required: true
+        schema: { type: string }
+      - name: documentId
+        in: path
+        required: true
+        schema: { type: string }
+    delete:
+      operationId: deleteHelperDocument
+      tags: [agensi]
+      summary: Remove a document this agency attached.
+      description: |
+        `api/uploads` serves no delete because an upload is addressed by a URL,
+        and whoever could delete by URL could delete another customer's. A
+        document is addressed by an agency-scoped id behind a staff token, so
+        deleting one is an agency deleting its own.
+
+        An agency that attached the wrong person's KTP must be able to remove
+        it. "Contact support to unpublish a national identity number" is not an
+        answer.
+      responses:
+        '204': { description: Removed. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /agensi/helpers/{helperId}/documents/{documentId}/file:
+    parameters:
+      - $ref: '#/components/parameters/AgencyAssertion'
+      - name: helperId
+        in: path
+        required: true
+        schema: { type: string }
+      - name: documentId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getHelperDocumentFile
+      tags: [agensi]
+      summary: The document's bytes, to the agency that holds them.
+      description: |
+        The only way to the bytes. There is no static path, no signed URL and no
+        public prefix under which this file lives — it is stored outside every
+        directory the service serves as static files, because a document written
+        into the upload directory is public the moment it lands, whatever this
+        document says about it.
+
+        A document belonging to another agency is `404`, through the same global
+        query filter as everything else. Never `403`, which confirms the id.
+      responses:
+        '200':
+          description: |
+            The stored bytes, with the stored content type. Not cacheable by a
+            shared cache.
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /agensi/reviews:
+    parameters:
+      - $ref: '#/components/parameters/AgencyAssertion'
+    get:
+      operationId: listAgencyReviews
+      tags: [agensi]
+      summary: Every review written about this agency's ART, newest first.
+      description: |
+        The per-ART list one level up. Each item names the ART it is about,
+        which `GET /helpers/{helperId}/reviews` correctly does not — that list
+        is already one ART's.
+
+        `summary` describes the agency's WHOLE set of reviews, not the page and
+        not the filter: a screen drawing five bars beside a filtered page is
+        drawing the whole against a part, which is what the bars are for.
+
+        It rides on every page rather than living in a second operation. Two
+        requests can disagree when a review lands between them, and
+        `ReviewPage.total` already sets the precedent that a whole-collection
+        number travels with a page.
+      parameters:
+        - name: helperId
+          in: query
+          description: |
+            One ART's reviews. An id belonging to another agency is `404`, not an
+            empty page — an empty page would confirm the id is real.
+          schema: { type: string }
+        - name: rating
+          in: query
+          description: Only reviews at this rating. The summary is unaffected.
+          schema: { type: integer, minimum: 1, maximum: 5 }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: A page of reviews, and the summary of all of them.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgencyReviewPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /agensi/uploads:
+    parameters:
+      - $ref: '#/components/parameters/AgencyAssertion'
+    post:
+      operationId: createStaffUpload
+      tags: [agensi]
+      summary: Upload one image as an agency, and get a URL back.
+      description: |
+        The agency's counterpart to `POST /uploads`, for an ART's photo. Same
+        limits, same storage, same publicly-readable URL — what differs is who
+        may call it and where the agency comes from.
+
+        A separate path rather than letting `/uploads` take either actor: an
+        operation resolves its agency from the header OR from the session, never
+        from whichever happens to be present. One endpoint doing both would be a
+        third resolution path, and the rule that every agensi operation ignores
+        `X-Agency` would stop being something a test can assert.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: JPEG, PNG or WebP. At most 5 MB.
+      responses:
+        '201':
+          description: Stored.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url]
+                properties:
+                  url: { type: string, format: uri }
+              examples:
+                stored:
+                  value: { url: 'https://api.example.id/uploads/9f2a.jpg' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413':
+          description: Larger than 5 MB.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '415':
+          description: Not a JPEG, PNG or WebP.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+components:
+  # ---------------------------------------------------------------- security --
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: |
+        Issued by `POST /auth/verify`. Required for anything that reads or writes
+        one customer's own data. The catalog endpoints are deliberately public:
+        the app lets a guest browse and meets the login wall only at booking.
+
+  # ----------------------------------------------------------------- headers --
+  parameters:
+    AgencyHeader:
+      name: X-Agency
+      in: header
+      required: true
+      description: |
+        The slug of the agency this bundle was built for. Every response is
+        scoped to it, and a customer app must not be able to read another
+        agency's roster, orders, vouchers or profile by any request it can
+        construct.
+
+        A header rather than a path segment: the agency never appears in a URL,
+        which keeps `apiUrl()` agency-free and leaves the reverse proxy — which
+        already routes per agency prefix — free to inject or verify it later.
+      schema:
+        type: string
+        examples: [humaira]
+
+    AgencyAssertion:
+      name: X-Agency
+      in: header
+      required: false
+      description: |
+        The slug of the agency this AGENT bundle was built for. Unlike
+        `AgencyHeader` it selects nothing: the agency an agensi operation acts
+        for is the one behind the token, always. This is compared to it.
+
+        A slug naming any other agency — real, suspended or nonexistent — is
+        `401 session_expired`, byte-identical to a token that was never issued,
+        so the header cannot be used to discover which slugs exist. Omitting it
+        behaves exactly as sending the token's own.
+
+        It exists because two bundles served from one host under different
+        prefixes share `localStorage`: an agent token written by one agency's
+        app is readable by another's. Ignoring the header would serve that
+        request under the wrong agency's branding; refusing it produces a
+        sign-in prompt.
+      schema:
+        type: string
+        examples: [humaira]
+
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: Page size. Capped at 100.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+    Offset:
+      name: offset
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+
+  # ------------------------------------------------------------------ schemas --
+  schemas:
+    Money:
+      type: integer
+      minimum: 0
+      description: |
+        Whole Indonesian rupiah. Never a float, never minor units, never a
+        formatted string like "Rp95.000" — formatting is the client's job,
+        because the client holds the locale and the design.
+      examples: [95000]
+
+    Instant:
+      type: string
+      format: date-time
+      description: |
+        RFC 3339 with an explicit offset. Never a human-formatted date: the
+        client renders "2 minggu lalu", the server does not.
+      examples: ['2026-09-07T14:32:00+07:00']
+
+    OrderStatus:
+      type: string
+      description: |
+        `menunggu_pembayaran` is new relative to the app as first built, which
+        created an order only once payment had "settled" — which no real payment
+        provider allows. `menunggu` keeps its meaning of *awaiting the agency's
+        confirmation*, so no screen's status copy changes.
+      enum:
+        - menunggu_pembayaran
+        - menunggu
+        - dikonfirmasi
+        - berlangsung
+        - selesai
+        - dibatalkan
+
+    BookingType:
+      type: string
+      enum: [sekali, rutin]
+
+    Frequency:
+      type: string
+      enum: [mingguan, bulanan]
+
+    PriceUnit:
+      type: string
+      enum: [kunjungan, bulan]
+
+    AvatarTone:
+      type: string
+      description: |
+        A key into the client's avatar palette, NOT a colour.
+
+        A hex on the wire is a style value living outside the client's
+        stylesheet, and an open set of colours lets the server hand an agency's
+        app a colour that clashes with its own brand ramp. The palette is
+        declared in the client stylesheet.
+      enum: [sage, clay, lilac, steel, wheat, rose, moss, camel, mist, mauve, fern]
+
+    VoucherTone:
+      type: string
+      description: |
+        A voucher's accent key. Two of the four are brand-relative — the
+        service voucher takes the agency's colour and the fee waiver takes the
+        info accent — so the value was never the data's to state.
+      enum: [promo, service, fee, recurring]
+
+    Schedule:
+      type: object
+      description: |
+        Structured, never a rendered label. There is no `scheduleLabel` field
+        anywhere in this contract.
+      required: [type, days, time]
+      properties:
+        type:
+          $ref: '#/components/schemas/BookingType'
+        frequency:
+          $ref: '#/components/schemas/Frequency'
+        days:
+          type: array
+          description: Days of the week, 0 = Sunday. Exactly one when `sekali`.
+          items:
+            type: integer
+            minimum: 0
+            maximum: 6
+          examples: [[1, 3]]
+        time:
+          type: string
+          pattern: '^([01]\d|2[0-3]):[0-5]\d$'
+          description: 24-hour start time.
+          examples: ['08:00']
+        startDate:
+          type: string
+          format: date
+          examples: ['2026-09-14']
+
+    # ------------------------------------------------------------- envelopes --
+    Error:
+      type: object
+      description: |
+        The body of EVERY response with status >= 400. No endpoint returns a
+        bare string, an array of errors, or a 200 carrying a failure.
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: Stable, snake_case, safe to branch on.
+              examples: [voucher_min_not_met]
+            message:
+              type: string
+              description: |
+                **Indonesian, display-ready.** The server owns this copy because
+                the server owns the rule that failed; the client shows it rather
+                than composing its own text from `code`.
+              examples: ['Minimal transaksi Rp500.000']
+            field:
+              type: string
+              description: The request field at fault, for form errors.
+              examples: [voucherCode]
+            details:
+              type: object
+              additionalProperties: true
+              description: Machine-readable specifics.
+              examples: [{ min: 500000 }]
+
+    Page:
+      type: object
+      description: |
+        Every collection is enveloped — never a bare array. `total` is the count
+        matching the query before paging.
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: {}
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+
+    # -------------------------------------------------------------- catalog --
+    Agency:
+      type: object
+      required:
+        [slug, name, city, description, serviceAreas, rating, reviewCount,
+         activeHelperCount, completedJobs, since, guarantee, checks, whatsapp,
+         acceptingBookings]
+      properties:
+        slug:
+          type: string
+          description: Echoed so the client can assert the build and the response agree.
+        name: { type: string }
+        city: { type: string, examples: ['Salatiga, Jawa Tengah'] }
+        description:
+          type: string
+          description: |
+            The agency's self-description, display-ready, and the agency's own
+            to change.
+
+            NOT `agents/<slug>/agent.json`'s `desc`, which stays a build input:
+            that one is substituted into `<meta name="description">` and the web
+            app manifest, which no fetched value can reach. The two were one
+            string doing two jobs, and only one of them is editable.
+        serviceAreas:
+          type: array
+          items: { type: string }
+          description: |
+            The areas the agency covers, in display order. May be empty.
+
+            An array rather than one comma-separated string: the split is lossy
+            on whitespace, a trailing comma, and any area whose name contains
+            one — and it would be implemented once per surface that renders it.
+        rating:
+          type: number
+          minimum: 0
+          maximum: 5
+          description: |
+            Derived from this agency's reviews by the same arithmetic that
+            computes an ART's, and `0` when there are none. It was a stored
+            value the seeder wrote and nothing recomputed, so a customer's
+            review moved the ART's rating and left the agency's where it was.
+        reviewCount: { type: integer, description: Derived. }
+        activeHelperCount:
+          type: integer
+          description: So a screen showing "N ART aktif" need not fetch the roster to count it.
+        completedJobs:
+          type: integer
+          description: Derived — the agency's completed orders.
+        since: { type: integer, examples: [2017] }
+        guarantee: { type: string }
+        checks:
+          type: array
+          items: { type: string }
+          description: The vetting steps, in display order.
+        whatsapp:
+          type: string
+          description: |
+            E.164 without the leading `+`. The app composes a `wa.me` link from
+            it — today's account screen has no number at all, so the link opens
+            WhatsApp with a message and no recipient.
+          examples: ['628123456789']
+        promo:
+          type: object
+          description: Absent when the agency is running no new-customer offer.
+          required: [headline, code]
+          properties:
+            headline: { type: string }
+            code: { type: string }
+        acceptingBookings:
+          type: boolean
+          description: |
+            Whether the agency is taking NEW bookings. `false` while it has
+            paused intake; `true` otherwise, including for an agency that has
+            never set it.
+
+            Stored, never derived. Not "every ART is busy" and not "the roster is
+            empty" — those are different facts, and an agency whose ART finished
+            a job would silently reopen. It is a statement the agency makes.
+
+            One column, served on BOTH surfaces — this schema is what `GET
+            /agency` and `GET /agensi/agency` each return. A separate
+            agency-facing field would be a way for the two to disagree about
+            whether the agency is open, and the one that matters is the one the
+            customer sees.
+
+            It governs the creation of new orders and nothing else. `POST
+            /bookings/quote` still prices, the roster still lists, and every
+            operation on an order that already exists stays available to both
+            sides.
+
+    Reference:
+      type: object
+      required:
+        [categories, bookingTimes, frequencies, addressLabels, cities, cancelReasons, reviewTags, paymentMethods]
+      properties:
+        categories:
+          type: array
+          items:
+            type: object
+            required: [id, label, icon]
+            properties:
+              id: { type: string }
+              label: { type: string }
+              icon: { type: string, description: A Phosphor icon class. }
+        bookingTimes:
+          type: array
+          items: { type: string, pattern: '^([01]\d|2[0-3]):[0-5]\d$' }
+        frequencies:
+          type: array
+          items:
+            type: object
+            required: [id, label]
+            properties:
+              id: { $ref: '#/components/schemas/Frequency' }
+              label: { type: string }
+        addressLabels: { type: array, items: { type: string } }
+        cities: { type: array, items: { type: string } }
+        cancelReasons: { type: array, items: { type: string } }
+        reviewTags: { type: array, items: { type: string } }
+        paymentMethods:
+          type: array
+          items:
+            type: object
+            required: [id, label, group, abbr]
+            properties:
+              id: { type: string }
+              label: { type: string }
+              group: { type: string, enum: [qris, va, ewallet] }
+              abbr: { type: string, description: Short badge text. }
+
+    Helper:
+      type: object
+      description: |
+        Carries NO agency slug: the response is already scoped by header, and a
+        per-item slug invites a client-side filter the server has already done.
+      required:
+        [id, name, initials, avatarTone, categories, serviceLabel, experienceYears,
+         age, rating, reviewCount, completedJobs, price, priceUnit, city,
+         availableDays, idVerified, backgroundChecked]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        initials: { type: string }
+        avatarTone: { $ref: '#/components/schemas/AvatarTone' }
+        categories: { type: array, items: { type: string } }
+        serviceLabel: { type: string }
+        experienceYears: { type: integer }
+        age:
+          type: integer
+          description: |
+            Whole years, DERIVED BY THE SERVER from the date of birth the agency
+            verified. A family choosing someone to come into their home asks how
+            old that person is; this is the answer to that question and nothing
+            more.
+
+            The date of birth itself is deliberately absent, here and everywhere
+            else on the wire. It is identity-document detail, this endpoint is
+            public and unauthenticated, and the customer's question does not
+            need it.
+
+            A client MUST NOT compute an age from anything else. Date arithmetic
+            on the device lands a day either side of a birthday depending on its
+            clock and zone, so two customers would see different numbers for the
+            same ART on the same day.
+
+            Required, like `experienceYears` beside it: an agency that has
+            verified an ART's identity documents knows their date of birth, so
+            there is no ART for whom this is unknown — and an optional field
+            would put an "unknown" state on every screen that draws it.
+          example: 34
+        rating: { type: number, minimum: 0, maximum: 5 }
+        reviewCount: { type: integer }
+        completedJobs: { type: integer }
+        price: { $ref: '#/components/schemas/Money' }
+        priceUnit: { $ref: '#/components/schemas/PriceUnit' }
+        city: { type: string }
+        availableDays:
+          type: array
+          items: { type: integer, minimum: 0, maximum: 6 }
+        idVerified: { type: boolean }
+        backgroundChecked: { type: boolean }
+
+    HelperProfile:
+      type: object
+      description: |
+        The long-form half of an ART. Factored out because the customer's detail
+        view and the agency's own view of the same ART both carry it, and a
+        field declared twice is a field that drifts.
+      required: [bio, skills, languages]
+      properties:
+        bio: { type: string }
+        skills: { type: array, items: { type: string } }
+        languages: { type: array, items: { type: string } }
+
+    HelperDetail:
+      allOf:
+        - $ref: '#/components/schemas/Helper'
+        - $ref: '#/components/schemas/HelperProfile'
+        - type: object
+          required: [isFavorite]
+          properties:
+            isFavorite:
+              type: boolean
+              description: |
+                Whether the CALLER has saved this ART. Deliberately absent from
+                the roster item: it is a fact about the caller, not the ART, and
+                on every item it would make the roster uncacheable for guests
+                and give two screens the same state to keep in step. The saved
+                set is asked for with `favorite=true` instead.
+
+    FavoriteState:
+      type: object
+      description: |
+        The state AFTER the call. Returned by both verbs so a client sets what it
+        is told rather than what it asked for.
+      required: [isFavorite]
+      properties:
+        isFavorite: { type: boolean }
+
+    HelperPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/Helper' }
+
+    Review:
+      type: object
+      required:
+        [id, authorName, authorInitials, authorTone, rating, createdAt, serviceLabel, tags, text]
+      properties:
+        id: { type: string }
+        authorName: { type: string }
+        authorInitials: { type: string }
+        authorTone: { $ref: '#/components/schemas/AvatarTone' }
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        createdAt:
+          allOf: [{ $ref: '#/components/schemas/Instant' }]
+          description: The client renders "2 minggu lalu"; the server does not.
+        serviceLabel: { type: string }
+        tags: { type: array, items: { type: string } }
+        text: { type: string }
+        photoUrl:
+          type: string
+          format: uri
+          description: |
+            The photo the customer attached, absent when there is none.
+
+            This replaced a `hasPhoto` boolean. A flag saying a photo exists
+            without saying where it is can only produce a placeholder, and it
+            did: the app shipped a hatched swatch reading "foto hasil kerja".
+            The URL is what a client needs, and its absence is the boolean.
+
+            Readable without authentication — a review renders on a public
+            profile. Issued by `POST /uploads`; see `ReviewInput.photoUrl`.
+
+    ReviewPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/Review' }
+
+    # ------------------------------------------------------------- identity --
+    Gender:
+      type: string
+      description: |
+        The Indonesian domain terms, as every other enumeration in this
+        document. Two values, matching what Indonesian identity documents
+        carry; anyone they do not describe leaves the field absent, which is why
+        it is optional and why nothing in the app branches on it.
+      enum: [perempuan, laki-laki]
+
+    User:
+      type: object
+      required: [id, phone, avatarTone]
+      properties:
+        id: { type: string }
+        name:
+          type: string
+          description: |
+            ABSENT when the customer has never set one — which is every account
+            created by verifying a phone number without one, i.e. every sign-in
+            through Masuk rather than Daftar.
+
+            The server does NOT substitute a placeholder. It used to default to
+            `Pelanggan`, and a fabricated name is indistinguishable on every
+            later read from one the customer chose: it greeted them on Beranda,
+            headed the account tab, derived their initials, and is the name an
+            agency reads on a `pesanan` for a stranger they are about to send an
+            ART to. Absence is a fact a client can act on; a placeholder is not.
+        initials:
+          type: string
+          description: |
+            Derived by the SERVER from `name`, so the two cannot drift apart.
+            Absent for exactly the customers `name` is absent for.
+        phone:
+          type: string
+          description: Local part, without the +62 prefix.
+        email: { type: string }
+        avatarTone: { $ref: '#/components/schemas/AvatarTone' }
+        birthDate:
+          type: string
+          format: date
+          description: |
+            A calendar date, `YYYY-MM-DD`. A date and not an instant: a birthday
+            has no time and no zone. Optional — nothing in the app needs it yet.
+        gender: { $ref: '#/components/schemas/Gender' }
+        photoUrl:
+          type: string
+          description: |
+            A URL issued by `POST /uploads`, the endpoint review photos already
+            use, and readable without authentication. Optional; the customer's
+            derived initials are the fallback wherever an avatar is drawn.
+
+    Address:
+      type: object
+      required: [id, label, city, detail, isPrimary]
+      properties:
+        id: { type: string }
+        label: { type: string, description: One of the reference `addressLabels`. }
+        city:
+          type: string
+          description: |
+            One of the reference `cities`. The form collected a city and threw it
+            away before this contract; here it is kept.
+        detail: { type: string }
+        landmark: { type: string, description: A nearby marker to find the house by. }
+        isPrimary:
+          type: boolean
+          description: |
+            Not settable through POST or PATCH. `POST /addresses/{id}/primary` is
+            the only way to move it.
+
+    AddressInput:
+      type: object
+      required: [label, city, detail]
+      additionalProperties: false
+      properties:
+        label: { type: string }
+        city: { type: string }
+        detail: { type: string }
+        landmark: { type: string }
+
+    AddressPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/Address' }
+
+    # -------------------------------------------------------------- booking --
+    QuoteInput:
+      type: object
+      required: [helperId, categoryId, type, days, time]
+      additionalProperties: false
+      properties:
+        helperId: { type: string }
+        categoryId: { type: string, description: One of the ART's own categories. }
+        type: { $ref: '#/components/schemas/BookingType' }
+        frequency:
+          allOf: [{ $ref: '#/components/schemas/Frequency' }]
+          description: Required when `type` is `rutin`.
+        days:
+          type: array
+          items: { type: integer, minimum: 0, maximum: 6 }
+          description: Exactly one entry when `type` is `sekali`.
+        time: { type: string, pattern: '^([01]\d|2[0-3]):[0-5]\d$' }
+        voucherCode: { type: string }
+
+    Quote:
+      type: object
+      required: [base, serviceFee, discount, total, voucher]
+      properties:
+        base: { $ref: '#/components/schemas/Money' }
+        serviceFee: { $ref: '#/components/schemas/Money' }
+        discount: { $ref: '#/components/schemas/Money' }
+        total:
+          allOf: [{ $ref: '#/components/schemas/Money' }]
+          description: |
+            `max(base + serviceFee - discount, 0)`, computed by the server. The
+            client displays it as given rather than deriving it.
+        voucher:
+          type: [object, 'null']
+          required: [code, title, amount]
+          properties:
+            code: { type: string }
+            title: { type: string }
+            amount: { $ref: '#/components/schemas/Money' }
+
+    Voucher:
+      type: object
+      required: [code, title, description, icon, tone, eligible]
+      properties:
+        code: { type: string }
+        title: { type: string }
+        description: { type: string }
+        icon: { type: string, description: A Phosphor icon class. }
+        tone: { $ref: '#/components/schemas/VoucherTone' }
+        eligible: { type: boolean }
+        ineligibleReason:
+          type: string
+          description: |
+            Indonesian, display-ready. Present exactly when `eligible` is false.
+            Ineligible vouchers are still listed: knowing a promo exists and why
+            it does not apply is more useful than the promo silently missing.
+
+    VoucherPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/Voucher' }
+
+    OrderInput:
+      type: object
+      required: [helperId, categoryId, type, days, time, contactPhone, paymentMethod]
+      additionalProperties: false
+      description: |
+        Carries no `total`, `serviceFee` or `discount` — sending one is a 422.
+        Exactly one of `addressId` or `address`.
+      properties:
+        helperId: { type: string }
+        categoryId: { type: string }
+        type: { $ref: '#/components/schemas/BookingType' }
+        frequency: { $ref: '#/components/schemas/Frequency' }
+        days:
+          type: array
+          items: { type: integer, minimum: 0, maximum: 6 }
+        time: { type: string, pattern: '^([01]\d|2[0-3]):[0-5]\d$' }
+        addressId: { type: string, description: A saved address to copy. }
+        address:
+          type: object
+          description: An address not being saved.
+          required: [city, detail]
+          properties:
+            city: { type: string }
+            detail: { type: string }
+            landmark: { type: string }
+        contactPhone: { type: string }
+        notes: { type: string }
+        voucherCode: { type: string }
+        paymentMethod: { type: string, description: An id from the reference lists. }
+
+    OrderSnapshot:
+      type: object
+      description: |
+        Copied at creation, not a live pointer. Editing a saved address, an ART's
+        price, or an ART's listing does not alter an existing order.
+      required: [city, detail]
+      properties:
+        city: { type: string }
+        detail: { type: string }
+        landmark: { type: string }
+
+    OrderHelper:
+      type: object
+      description: Copied at creation, so a past booking stays legible if the ART leaves.
+      required: [id, name, initials, avatarTone]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        initials: { type: string }
+        avatarTone: { $ref: '#/components/schemas/AvatarTone' }
+
+    OrderPricing:
+      type: object
+      description: Frozen at creation.
+      required: [base, serviceFee, discount, total, voucher]
+      properties:
+        base: { $ref: '#/components/schemas/Money' }
+        serviceFee: { $ref: '#/components/schemas/Money' }
+        discount: { $ref: '#/components/schemas/Money' }
+        total: { $ref: '#/components/schemas/Money' }
+        voucher:
+          type: [object, 'null']
+          required: [code, title, amount]
+          properties:
+            code: { type: string }
+            title: { type: string }
+            amount: { $ref: '#/components/schemas/Money' }
+
+    OrderReview:
+      type: object
+      required: [rating, tags, text, createdAt]
+      properties:
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        tags: { type: array, items: { type: string } }
+        text: { type: string }
+        photoUrl:
+          type: string
+          format: uri
+          description: The order's copy of the review photo, on the same terms.
+        createdAt: { $ref: '#/components/schemas/Instant' }
+
+    ReviewInput:
+      type: object
+      required: [rating, tags, text]
+      additionalProperties: false
+      properties:
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        tags:
+          type: array
+          items: { type: string }
+          description: Each one from the reference `reviewTags`.
+        text: { type: string }
+        photoUrl:
+          # 3.1 nullability — the same shape `requestOtp`'s `name` uses. A 3.0
+          # `nullable: true` is silently ignored here, which would have made
+          # "remove the photo" unexpressible.
+          type: [string, 'null']
+          format: uri
+          description: |
+            A URL previously returned by `POST /uploads`. One the server did not
+            issue is a 422 on `photoUrl` — a review that can carry an arbitrary
+            URL is a review that can embed anything.
+
+            On PATCH, ABSENT and NULL are different requests: absent leaves the
+            existing photo alone, null removes it. Conflating them would make
+            removing a photo impossible.
+
+    OrderCore:
+      type: object
+      description: |
+        Everything true of an order whoever is reading it. The customer's view
+        and the agency's view both compose this; neither restates a field of it.
+      required:
+        [id, reference, status, categoryId, serviceLabel, schedule, helper, address,
+         contactPhone, pricing, paymentMethod, statusHistory, createdAt]
+      properties:
+        id: { type: string, description: Opaque. Used in URLs. }
+        reference:
+          type: string
+          description: The display code, carrying the agency's prefix.
+          examples: [HC-820471]
+        status: { $ref: '#/components/schemas/OrderStatus' }
+        categoryId: { type: string }
+        serviceLabel: { type: string }
+        schedule: { $ref: '#/components/schemas/Schedule' }
+        helper: { $ref: '#/components/schemas/OrderHelper' }
+        address: { $ref: '#/components/schemas/OrderSnapshot' }
+        contactPhone: { type: string }
+        notes: { type: string }
+        pricing: { $ref: '#/components/schemas/OrderPricing' }
+        paymentMethod:
+          type: object
+          required: [id, label]
+          properties:
+            id: { type: string }
+            label: { type: string }
+        paidAt:
+          allOf: [{ $ref: '#/components/schemas/Instant' }]
+          description: Absent until the payment settles.
+        cancelReason: { type: string }
+        review:
+          allOf: [{ $ref: '#/components/schemas/OrderReview' }]
+          description: |
+            Present once the order has been reviewed. Carried on the shared core
+            rather than the customer's view alone: an agency reads the review
+            left on its own order, and that is the same object.
+        statusHistory:
+          type: array
+          description: Chronological. What the tracker renders from.
+          items:
+            type: object
+            required: [status, at]
+            properties:
+              status: { $ref: '#/components/schemas/OrderStatus' }
+              at: { $ref: '#/components/schemas/Instant' }
+        createdAt: { $ref: '#/components/schemas/Instant' }
+
+    Order:
+      description: The customer's view of their own order.
+      allOf:
+        - $ref: '#/components/schemas/OrderCore'
+        - type: object
+          required: [canCancel, canReview]
+          properties:
+            canCancel:
+              type: boolean
+              description: The server's determination, so the app need not hold the rule.
+            canReview: { type: boolean }
+
+    OrderPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/Order' }
+
+    Payment:
+      type: object
+      description: |
+        Exactly one of `qrisPayload`, `vaNumber` or `deeplinkUrl`, according to
+        the method. Deliberately provider-shaped — an id, a status, an expiry and
+        one of three payloads — so that choosing Midtrans or Xendit later affects
+        the backend and the mock, not this contract.
+      required: [id, method, status, expiresAt]
+      properties:
+        id: { type: string }
+        method: { type: string }
+        status:
+          type: string
+          enum: [pending, paid, expired, failed]
+        expiresAt: { $ref: '#/components/schemas/Instant' }
+        qrisPayload: { type: string, description: The QR's contents. }
+        vaNumber: { type: string }
+        deeplinkUrl: { type: string, format: uri }
+
+    # -------------------------------------------------------------- agensi --
+    # Everything below is read and written by the agent app only. Field names are
+    # English and values are Indonesian, exactly as on every other surface —
+    # `reference`, not `referensi`; `status: menunggu`, not `status: waiting`.
+    # One document holding two naming conventions is the drift this document is
+    # organised to prevent.
+
+    StaffRole:
+      type: string
+      description: |
+        What a staff member may do within their own agency. `pemilik` manages
+        the roster, the orders AND the agency's other accounts; `staf` manages
+        the roster and the orders only.
+
+        A domain value, so Indonesian — as `menunggu` and `sekali` are.
+      enum: [pemilik, staf]
+
+    AgencyRef:
+      type: object
+      description: |
+        The agency a staff member belongs to. Carried because it is the
+        authoritative answer to "whose data is this?" — the app is TOLD, never
+        asked. The agent app has its own slug, but
+        that slug is what the app asserts, not what the server resolved: the
+        two agreeing is exactly what sign-in checks.
+      required: [slug, name]
+      properties:
+        slug: { type: string }
+        name: { type: string }
+
+    Staff:
+      type: object
+      required: [id, phone, role, agency]
+      properties:
+        id: { type: string }
+        name:
+          type: string
+          description: |
+            ABSENT until the staff member sets one. The server substitutes no
+            placeholder, for the reason `User.name` gives.
+        phone: { type: string, description: 'Local part, without the +62 prefix.' }
+        role: { $ref: '#/components/schemas/StaffRole' }
+        agency: { $ref: '#/components/schemas/AgencyRef' }
+        createdAt: { $ref: '#/components/schemas/Instant' }
+
+    StaffPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/Staff' }
+
+    OrderCustomer:
+      type: object
+      description: |
+        Who the order is for, as the agency needs to reach them. Deliberately
+        not the whole `User`: an agency has no business with the customer's
+        email, birth date or gender, and a booking does not need them.
+      required: [phone]
+      properties:
+        name:
+          type: string
+          description: |
+            ABSENT when the customer has never set one. The agency sees the
+            absence rather than a fabricated `Pelanggan` — it is the name they
+            will use for a stranger they are about to send an ART to.
+        phone: { type: string }
+
+    AgencyOrder:
+      description: |
+        The agency's view of an order on its own queue. Composes the same
+        `OrderCore` the customer reads, so the two can never describe one order
+        differently, and adds who it is for.
+
+        Carries no `canCancel` or `canReview`: those are determinations about
+        what the CUSTOMER may do, and an agency acting on them would be reading
+        someone else's permissions.
+      allOf:
+        - $ref: '#/components/schemas/OrderCore'
+        - type: object
+          required: [customer]
+          properties:
+            customer: { $ref: '#/components/schemas/OrderCustomer' }
+
+    AgencyOrderPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/AgencyOrder' }
+
+    AgencyHelper:
+      description: |
+        The agency's view of its own ART — the public roster item, plus the
+        long-form profile, plus what only the agency sees: whether they are
+        retired, and how much live work would block retiring them.
+
+        `birthDate` is absent here as it is everywhere: it is
+        identity-document detail, and `age` is the derived answer to the only
+        question anyone asks of it.
+      allOf:
+        - $ref: '#/components/schemas/Helper'
+        - $ref: '#/components/schemas/HelperProfile'
+        - type: object
+          required: [activeOrderCount]
+          properties:
+            photoUrl: { type: string, format: uri }
+            retiredAt:
+              allOf: [{ $ref: '#/components/schemas/Instant' }]
+              description: Absent while the ART is on the roster.
+            activeOrderCount:
+              type: integer
+              description: |
+                Orders in `menunggu`, `dikonfirmasi` or `berlangsung`. Non-zero
+                is exactly what refuses a retirement, so the agency can see the
+                refusal coming rather than meet it as a 409.
+
+    AgencyHelperPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/AgencyHelper' }
+
+    HelperInput:
+      type: object
+      description: |
+        What an agency may state about an ART. Every field the SERVER derives is
+        absent and is REFUSED if sent — `rating`, `reviewCount`, `completedJobs`,
+        `age` and `initials`. Refused rather than ignored: a silently dropped
+        field is indistinguishable from a stored one until someone reads it
+        back, and the client that sent it believes it worked.
+
+        `birthDate` is accepted and never returned. `age` is derived from it.
+      additionalProperties: false
+      required:
+        [name, birthDate, categories, serviceLabel, experienceYears, price,
+         priceUnit, city, availableDays, bio, skills, languages]
+      properties:
+        name: { type: string, minLength: 1 }
+        birthDate:
+          type: string
+          format: date
+          description: |
+            The fact the agency verified. Never returned on any surface; `age`
+            is what the wire carries.
+        categories: { type: array, items: { type: string }, minItems: 1 }
+        serviceLabel: { type: string }
+        experienceYears: { type: integer, minimum: 0 }
+        price: { $ref: '#/components/schemas/Money' }
+        priceUnit: { $ref: '#/components/schemas/PriceUnit' }
+        city: { type: string }
+        availableDays:
+          type: array
+          items: { type: integer, minimum: 0, maximum: 6 }
+        avatarTone:
+          allOf: [{ $ref: '#/components/schemas/AvatarTone' }]
+          description: Assigned by the server when absent.
+        idVerified:
+          type: boolean
+          description: |
+            The agency's own claim, and live on the public profile the moment it
+            is set. The rejected alternative reserved this and
+            `backgroundChecked` to a platform operator, on the argument that a
+            customer trusts them; it was rejected because the agency holds the
+            documents and does the checking, and a flag the platform sets from
+            nothing is a worse claim than one the agency sets from evidence.
+        backgroundChecked: { type: boolean }
+        bio: { type: string }
+        skills: { type: array, items: { type: string } }
+        languages: { type: array, items: { type: string } }
+        photoUrl:
+          type: [string, 'null']
+          format: uri
+          description: |
+            A URL THIS deployment issued, from `POST /agensi/uploads`. A foreign
+            host is refused. Null clears it.
+
+        # Declared so that sending one is answered by NAME. Omitted entirely,
+        # `additionalProperties: false` would answer a generic
+        # `400 malformed_body` — true, but it names nothing and reads like a
+        # broken request rather than "the server decides this one".
+        rating:
+          type: number
+          description: 'REFUSED. Derived from reviews. Sending it is 422 `validation_failed`.'
+        reviewCount:
+          type: integer
+          description: 'REFUSED. Derived. Sending it is 422 `validation_failed`.'
+        completedJobs:
+          type: integer
+          description: 'REFUSED. Derived. Sending it is 422 `validation_failed`.'
+        age:
+          type: integer
+          description: 'REFUSED. Derived from `birthDate`. Sending it is 422 `validation_failed`.'
+        initials:
+          type: string
+          description: 'REFUSED. Derived from `name`. Sending it is 422 `validation_failed`.'
+
+    HelperPatch:
+      type: object
+      description: |
+        Every field of `HelperInput`, all optional. Absent means unchanged;
+        the same refusals apply to the derived fields.
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1 }
+        birthDate: { type: string, format: date }
+        categories: { type: array, items: { type: string }, minItems: 1 }
+        serviceLabel: { type: string }
+        experienceYears: { type: integer, minimum: 0 }
+        price: { $ref: '#/components/schemas/Money' }
+        priceUnit: { $ref: '#/components/schemas/PriceUnit' }
+        city: { type: string }
+        availableDays:
+          type: array
+          items: { type: integer, minimum: 0, maximum: 6 }
+        avatarTone: { $ref: '#/components/schemas/AvatarTone' }
+        idVerified: { type: boolean }
+        backgroundChecked: { type: boolean }
+        bio: { type: string }
+        skills: { type: array, items: { type: string } }
+        languages: { type: array, items: { type: string } }
+        photoUrl: { type: [string, 'null'], format: uri }
+        # Refused here too. See `HelperInput`.
+        rating: { type: number, description: 'REFUSED. Derived.' }
+        reviewCount: { type: integer, description: 'REFUSED. Derived.' }
+        completedJobs: { type: integer, description: 'REFUSED. Derived.' }
+        age: { type: integer, description: 'REFUSED. Derived.' }
+        initials: { type: string, description: 'REFUSED. Derived.' }
+
+    AgencyPatch:
+      type: object
+      description: |
+        What an agency may say about ITSELF. Four fields, all optional; absent
+        means unchanged.
+
+        The refused ones are declared so that sending one is answered BY NAME.
+        Omitted entirely, `additionalProperties: false` would answer a generic
+        `400 malformed_body` — true, but it names nothing and reads like a broken
+        request rather than "the server decides this one". Same reasoning as
+        `HelperInput`.
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1 }
+        city: { type: string, minLength: 1 }
+        description: { type: string }
+        serviceAreas:
+          type: array
+          items: { type: string, minLength: 1 }
+          description: Replaces the whole list. An empty array clears it.
+        acceptingBookings:
+          type: boolean
+          description: |
+            `pemilik` ONLY. A `staf` sending it is refused `403 forbidden`, and
+            the request writes NOTHING — not this field and not the other four
+            sent alongside it.
+
+            The gate is on the FIELD rather than the operation: a `staf` may
+            still rename the agency, which is the ordinary editing this
+            operation exists for. What a `staf` may not do is stop the agency
+            earning.
+
+            Refusing the whole request rather than writing the permitted fields
+            and dropping this one, for the same reason the unknown properties
+            below are named rather than ignored: a silently dropped field is
+            indistinguishable from a stored one until someone reads it back.
+
+        rating:
+          type: number
+          description: 'REFUSED. Derived from reviews. Sending it is 422 `validation_failed`.'
+        reviewCount:
+          type: integer
+          description: 'REFUSED. Derived. Sending it is 422 `validation_failed`.'
+        activeHelperCount:
+          type: integer
+          description: 'REFUSED. Derived. Sending it is 422 `validation_failed`.'
+        completedJobs:
+          type: integer
+          description: 'REFUSED. Derived. Sending it is 422 `validation_failed`.'
+        since:
+          type: integer
+          description: 'REFUSED. The operator''s. Sending it is 422 `validation_failed`.'
+        guarantee:
+          type: string
+          description: |
+            REFUSED. A customer reads this as the PLATFORM's promise, and an
+            agency that could type it could promise anything under the
+            platform's name. Sending it is 422 `validation_failed`.
+        checks:
+          type: array
+          items: { type: string }
+          description: 'REFUSED, for the same reason as `guarantee`.'
+        whatsapp:
+          type: string
+          description: 'REFUSED. The operator''s, only because no screen asks for it.'
+        promo:
+          type: object
+          description: 'REFUSED. The operator''s, only because no screen asks for it.'
+        slug:
+          type: string
+          description: |
+            REFUSED. The agency is the session's. A body field naming one would
+            be an authorisation decision made by the caller.
+
+    HelperDocumentType:
+      type: string
+      description: |
+        The three documents an Indonesian agency holds for an ART. Indonesian
+        terms, as every other enumeration in this document.
+      enum: [ktp, skck, surat_sehat]
+
+    HelperDocument:
+      type: object
+      description: |
+        One attached document. Carries NO url, and no operation returns one —
+        the bytes come from the `/file` sub-resource and nowhere else.
+
+        Carries no verification state, no reviewer and no expiry either. The
+        design canvas draws "Terverifikasi"; the roster already decided there is
+        no draft state and no approval step, and `idVerified` is the agency's
+        own claim for the same reason. A badge over a file nobody checked is a
+        worse claim than no badge.
+      required: [id, type, contentType, sizeBytes, uploadedAt]
+      properties:
+        id: { type: string }
+        type: { $ref: '#/components/schemas/HelperDocumentType' }
+        contentType:
+          type: string
+          description: Determined from the file's own bytes, never from what was declared.
+          examples: ['image/jpeg', 'application/pdf']
+        sizeBytes: { type: integer }
+        uploadedAt: { $ref: '#/components/schemas/Instant' }
+
+    ReviewSummary:
+      type: object
+      description: |
+        Every review the agency has — not the page, and not the filter. A screen
+        drawing five bars beside a filtered page is drawing the whole against a
+        part, which is what the bars are for.
+      required: [average, count, distribution]
+      properties:
+        average:
+          type: number
+          minimum: 0
+          maximum: 5
+          description: One decimal place, and `0` when there are no reviews.
+        count: { type: integer }
+        distribution:
+          type: array
+          minItems: 5
+          maxItems: 5
+          description: |
+            Exactly five entries, `5` down to `1`, every rating present even at
+            zero — the shape of the bars is the information, and a missing row
+            reads as a missing rating rather than as none.
+          items:
+            type: object
+            required: [rating, count]
+            properties:
+              rating: { type: integer, minimum: 1, maximum: 5 }
+              count: { type: integer }
+
+    AgencyReview:
+      description: |
+        A review, plus the ART it is about. The per-ART list carries no helper
+        because it is already one ART's; this list spans the roster.
+      allOf:
+        - $ref: '#/components/schemas/Review'
+        - type: object
+          required: [helper]
+          properties:
+            helper:
+              type: object
+              required: [id, name]
+              properties:
+                id: { type: string }
+                name: { type: string }
+
+    AgencyReviewPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - type: object
+          required: [summary]
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/AgencyReview' }
+            summary: { $ref: '#/components/schemas/ReviewSummary' }
+
+  # ---------------------------------------------------------------- responses --
+  responses:
+    BadRequest:
+      description: Malformed request, or the agency header is missing.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            agencyRequired:
+              value:
+                error:
+                  code: agency_required
+                  message: Permintaan tidak sah.
+
+    Unauthorized:
+      description: No token, or a token that is expired, revoked or unknown.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            unauthenticated:
+              value:
+                error:
+                  code: unauthenticated
+                  message: Masuk dulu untuk melanjutkan.
+            sessionExpired:
+              value:
+                error:
+                  code: session_expired
+                  message: Sesi Anda telah berakhir. Masuk kembali.
+
+    NotFound:
+      description: |
+        The resource does not exist, or belongs to another agency or another
+        customer. Deliberately not 403: that would confirm the id exists.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            notFound:
+              value:
+                error:
+                  code: not_found
+                  message: Data tidak ditemukan.
+            agencyNotFound:
+              value:
+                error:
+                  code: agency_not_found
+                  message: Agensi tidak ditemukan.
+
+    Conflict:
+      description: The request is valid but the resource's state forbids it.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            orderNotCancellable:
+              value:
+                error:
+                  code: order_not_cancellable
+                  message: Pesanan ini sudah tidak bisa dibatalkan.
+
+    Forbidden:
+      description: |
+        Authenticated, and not permitted. Used where a 404 would be wrong
+        because the caller already knows the resource exists — a `staf`
+        attempting a `pemilik` operation on their own agency.
+
+        NOT used for another agency's row: that is a 404, because a 403 there
+        would confirm the id is real.
+
+        NOT used for a token of the wrong actor type either. A customer token on
+        an agensi operation, and an agent token on a customer one, are each `401
+        session_expired` — indistinguishable from a token that was never issued.
+        A 403 there would be the more honest description of what happened, and
+        that is why it is refused: it tells the holder that the other surface
+        exists and that their token is otherwise valid. A `staf` meeting this 403
+        has already proved they staff the agency, so there is nothing left to
+        conceal from them.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            wrongRole:
+              value:
+                error:
+                  code: forbidden
+                  message: Hanya pemilik agensi yang bisa melakukan ini.
+            suspended:
+              value:
+                error:
+                  code: agency_suspended
+                  message: Agensi Anda sedang tidak aktif. Hubungi kami.
+
+    LastPemilik:
+      description: |
+        An agency SHALL always retain at least one `pemilik`. Removing or
+        demoting the last one would leave nobody able to manage the account,
+        recoverable only by a platform operator.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            lastOwner:
+              value:
+                error:
+                  code: last_pemilik
+                  message: Agensi harus punya minimal satu pemilik.
+
+    OrderStatusConflict:
+      description: |
+        The order is not in the status the transition expects — someone else
+        moved it, or the client is showing a stale queue. `error.details.status`
+        carries where it actually is, so the client can correct itself rather
+        than guess.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            alreadyMoved:
+              value:
+                error:
+                  code: order_status_conflict
+                  message: Status pesanan sudah berubah. Muat ulang.
+                  details: { status: dikonfirmasi }
+
+    Unprocessable:
+      description: A field failed validation or a business rule.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            validationFailed:
+              value:
+                error:
+                  code: validation_failed
+                  message: Isi alamat dulu.
+                  field: address
+
+    TooManyRequests:
+      description: Rate limited. `details.retryAfter` is in seconds.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            resendTooSoon:
+              value:
+                error:
+                  code: otp_resend_too_soon
+                  message: Tunggu sebentar sebelum meminta kode lagi.
+                  details: { retryAfter: 42 }
+
+    ServerError:
+      description: |
+        An unexpected fault. Carries no stack trace, query or internal
+        identifier.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            internal:
+              value:
+                error:
+                  code: internal_error
+                  message: Terjadi gangguan. Coba lagi sebentar lagi.
