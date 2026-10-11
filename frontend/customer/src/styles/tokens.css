@@ -102,6 +102,52 @@
   [data-voucher='recurring'] {
     --tone: var(--color-voucher-recurring);
   }
+
+  /* Pull to refresh: ScrollArea sets the state key, these resolve it. */
+  [data-pull] {
+    --pull-y: -44px;
+    --pull-opacity: 0;
+    --pull-spin: 0deg;
+  }
+  [data-pull='pulling'] {
+    --pull-y: 8px;
+    --pull-opacity: 1;
+  }
+  [data-pull='ready'] {
+    --pull-y: 14px;
+    --pull-opacity: 1;
+
+    --pull-spin: 180deg;
+  }
+  [data-pull='busy'] {
+    --pull-y: 14px;
+    --pull-opacity: 1;
+  }
+
+
+  /* Scroll header: whether the screen title has scrolled out of view. */
+  [data-condensed] {
+    --header-title-opacity: 0;
+    --header-title-y: 6px;
+    --header-hairline: transparent;
+  }
+  [data-condensed='true'] {
+    --header-title-opacity: 1;
+    --header-title-y: 0;
+    --header-hairline: var(--color-hairline-soft);
+  }
+
+  [data-header-tone='onSurface'] {
+    --header-surface: var(--color-surface);
+  }
+
+  [data-header-tone='onHero'] {
+    --header-surface: transparent;
+  }
+  [data-condensed='true'][data-header-tone='onHero'] {
+    --header-surface: var(--color-pri);
+    --header-hairline: transparent;
+  }
 }
 
 /* Read the key at the point of use. A theme token would resolve --tone on :root and freeze the fallback. */
@@ -122,4 +168,30 @@
 }
 @utility bg-brand {
   background-color: var(--brand, var(--color-ink-soft));
+}
+@utility pull-indicator {
+  transform: translateY(var(--pull-y));
+  opacity: var(--pull-opacity);
+
+  transition:
+    transform 0.18s ease,
+    opacity 0.18s ease;
+}
+@utility pull-arrow {
+  transform: rotate(var(--pull-spin));
+  transition: transform 0.18s ease;
+}
+@utility header-title {
+  opacity: var(--header-title-opacity);
+  transform: translateY(var(--header-title-y));
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease;
+}
+@utility bg-header {
+  background-color: var(--header-surface, transparent);
+  transition: background-color 0.16s ease;
+}
+@utility border-header {
+  border-color: var(--header-hairline, transparent);
 }
