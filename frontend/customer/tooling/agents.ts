@@ -73,18 +73,12 @@ function assertSquare(logoPath: string, bad: (m: string) => never): void {
   }
 }
 
-// No default agency: building the wrong one silently is worse than failing.
+export const DEFAULT_AGENT = 'humaira'
+
 export function resolveAgentSlug(root: string): string {
-  const slug = process.env.AGENT?.trim()
+  const slug = process.env.AGENT?.trim() || DEFAULT_AGENT
   const known = listAgents(root)
 
-  if (!slug) {
-    fail(
-      `AGENT is not set, every build is for one agency.\n` +
-        `  AGENT=${known[0] ?? '<slug>'} npm run dev\n` +
-        `Available: ${known.join(', ') || '(none)'}`,
-    )
-  }
   if (!known.includes(slug)) {
     fail(`Unknown agent "${slug}". Available: ${known.join(', ') || '(none)'}`)
   }
