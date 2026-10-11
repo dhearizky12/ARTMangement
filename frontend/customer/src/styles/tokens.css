@@ -1,0 +1,125 @@
+/* A component sets a data-* key; the key resolves to a token here. */
+
+@layer base {
+
+  /* Avatar tone, per person */
+  [data-tone='sage'] {
+    --tone: var(--color-tone-sage);
+  }
+  [data-tone='clay'] {
+    --tone: var(--color-tone-clay);
+  }
+  [data-tone='lilac'] {
+    --tone: var(--color-tone-lilac);
+  }
+  [data-tone='steel'] {
+    --tone: var(--color-tone-steel);
+  }
+  [data-tone='wheat'] {
+    --tone: var(--color-tone-wheat);
+  }
+  [data-tone='rose'] {
+    --tone: var(--color-tone-rose);
+  }
+  [data-tone='moss'] {
+    --tone: var(--color-tone-moss);
+  }
+  [data-tone='camel'] {
+    --tone: var(--color-tone-camel);
+  }
+  [data-tone='mist'] {
+    --tone: var(--color-tone-mist);
+  }
+  [data-tone='mauve'] {
+    --tone: var(--color-tone-mauve);
+  }
+  [data-tone='fern'] {
+    --tone: var(--color-tone-fern);
+  }
+
+  /* Order status */
+  [data-status='menunggu_pembayaran'] {
+    --status-bg: var(--color-status-tunggu-bayar-bg);
+    --status-fg: var(--color-status-tunggu-bayar-fg);
+  }
+  [data-status='menunggu'] {
+    --status-bg: var(--color-status-menunggu-bg);
+    --status-fg: var(--color-status-menunggu-fg);
+  }
+  [data-status='dikonfirmasi'] {
+    --status-bg: var(--color-status-dikonfirmasi-bg);
+    --status-fg: var(--color-status-dikonfirmasi-fg);
+  }
+  [data-status='berlangsung'] {
+    --status-bg: var(--color-status-berlangsung-bg);
+    --status-fg: var(--color-status-berlangsung-fg);
+  }
+  [data-status='selesai'] {
+    --status-bg: var(--color-status-selesai-bg);
+    --status-fg: var(--color-status-selesai-fg);
+  }
+  [data-status='dibatalkan'] {
+    --status-bg: var(--color-status-dibatalkan-bg);
+    --status-fg: var(--color-status-dibatalkan-fg);
+  }
+
+  /* Payment provider. QRIS has none: it uses the agency colour. */
+  [data-brand='va_bca'] {
+    --brand: var(--color-brand-bca);
+  }
+  [data-brand='va_bri'] {
+    --brand: var(--color-brand-bri);
+  }
+  [data-brand='va_mandiri'] {
+    --brand: var(--color-brand-mandiri);
+  }
+  [data-brand='va_bni'] {
+    --brand: var(--color-brand-bni);
+  }
+  [data-brand='gopay'] {
+    --brand: var(--color-brand-gopay);
+  }
+  [data-brand='ovo'] {
+    --brand: var(--color-brand-ovo);
+  }
+  [data-brand='dana'] {
+    --brand: var(--color-brand-dana);
+  }
+  [data-brand='shopee'] {
+    --brand: var(--color-brand-shopee);
+  }
+
+  /* Voucher accent */
+  [data-voucher='promo'] {
+    --tone: var(--color-promo);
+  }
+  [data-voucher='service'] {
+    --tone: var(--color-pri);
+  }
+  [data-voucher='fee'] {
+    --tone: var(--color-info);
+  }
+  [data-voucher='recurring'] {
+    --tone: var(--color-voucher-recurring);
+  }
+}
+
+/* Read the key at the point of use. A theme token would resolve --tone on :root and freeze the fallback. */
+@utility bg-tone {
+  background-color: var(--tone, var(--color-ink-ghost));
+}
+@utility text-tone {
+  color: var(--tone, var(--color-ink-ghost));
+}
+@utility border-tone {
+  border-color: var(--tone, var(--color-ink-ghost));
+}
+@utility bg-status {
+  background-color: var(--status-bg, var(--color-hairline-faint));
+}
+@utility text-status {
+  color: var(--status-fg, var(--color-ink-soft));
+}
+@utility bg-brand {
+  background-color: var(--brand, var(--color-ink-soft));
+}

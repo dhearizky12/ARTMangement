@@ -1,0 +1,270 @@
+@theme {
+  /* Agency ramp. --pri* is written at startup from the agency colour; never put a hex here. */
+  --color-pri: var(--pri);
+  --color-pri-dark: var(--pri-dark);
+  --color-pri-tint: var(--pri-tint);
+  --color-pri-border: var(--pri-border);
+  --color-pri-soft: var(--pri-soft);
+
+  /* Text */
+  --color-ink: #23302a;
+  --color-ink-body: #3d453e;
+  --color-ink-label: #4c5650;
+  --color-ink-prose: #5c655d;
+  --color-ink-soft: #7a8078;
+  --color-ink-faint: #9aa39a;
+  --color-ink-dim: #a8b0a4;
+  --color-ink-ghost: #c9c2b4;
+
+  /* Icons for empty states and unavailable items */
+  --color-glyph-1: #b6ac9a;
+  --color-glyph-2: #c2bbab;
+  --color-glyph-3: #b3aa99;
+
+  /* Backgrounds */
+  --color-surface: #faf6f0;
+  --color-surface-raised: #fdfbf7;
+  --color-surface-muted: #f4efe6;
+  --color-surface-sunk: #f1ebe0;
+  --color-card: #ffffff;
+
+  --color-offstage: #ddd6c9;
+
+  /* White overlays on a coloured hero. Declared instead of bg-white/N so the colour is exact. */
+  --color-overlay-14: rgba(255, 255, 255, 0.14);
+  --color-overlay-16: rgba(255, 255, 255, 0.16);
+  --color-overlay-18: rgba(255, 255, 255, 0.18);
+  --color-overlay-32: rgba(255, 255, 255, 0.32);
+  --color-overlay-35: rgba(255, 255, 255, 0.35);
+
+  /* Dark layer behind a sheet */
+  --color-scrim: rgba(31, 26, 20, 0.44);
+
+  /* Borders and dividers */
+  --color-hairline: #ece5d8;
+  --color-hairline-soft: #efe8db;
+  --color-hairline-faint: #f2ece1;
+  --color-line-dashed: #e0d9cb;
+  --color-line-dashed-strong: #d5cdbc;
+  --color-divider-strong: #ddd4c4;
+
+  /* Idle and disabled controls */
+  --color-control-idle: #e6ddce;
+  --color-control-off: #cfc7b6;
+
+  /* Rating stars */
+  --color-star: var(--color-promo);
+  --color-star-lg: #f4c66a;
+  --color-star-off: #e0d9cb;
+  --color-star-off-lg: #d8d1c2;
+
+  /* Promo amber, the same for every agency */
+  --color-promo: #c8892b;
+  --color-promo-ink: #7a5410;
+  --color-promo-ink-soft: #9c7a3a;
+  --color-promo-tint: #fbf1de;
+  --color-promo-tint-deep: #f6e4c4;
+  --color-promo-border: #eccf95;
+
+  /* Destructive and error */
+  --color-danger: #c0392b;
+  --color-danger-strong: #a3372a;
+  --color-danger-ink: #8c5b57;
+  --color-danger-tint: #fbeaea;
+  --color-danger-tint-soft: #fdf1ef;
+  --color-danger-border: #f0dcd7;
+  --color-danger-line: #f4d9d3;
+
+  /* Accent that is not an agency colour */
+  --color-info: #35597f;
+  --color-info-tint: #e3edf7;
+
+  /* Verified and WhatsApp */
+  --color-success: #5c8a72;
+  --color-whatsapp: #25a35a;
+
+  /* Order status badges, bound to data-status in tokens.css */
+  --color-status-tunggu-bayar-bg: #f2ece1;
+  --color-status-tunggu-bayar-fg: #7a8078;
+  --color-status-menunggu-bg: #fbf1de;
+  --color-status-menunggu-fg: #9c7a3a;
+  --color-status-dikonfirmasi-bg: var(--pri-tint);
+  --color-status-dikonfirmasi-fg: var(--pri);
+  --color-status-berlangsung-bg: #e3edf7;
+  --color-status-berlangsung-fg: #35597f;
+  --color-status-selesai-bg: #eceade;
+  --color-status-selesai-fg: #7a8078;
+  --color-status-dibatalkan-bg: #fbeaea;
+  --color-status-dibatalkan-fg: #c0392b;
+
+  /* Avatar tones, bound to data-tone in tokens.css */
+  --color-tone-sage: #8bb59a;
+  --color-tone-clay: #d0a884;
+  --color-tone-lilac: #b0a0cf;
+  --color-tone-steel: #8fadbf;
+  --color-tone-wheat: #d4b878;
+  --color-tone-rose: #c99a9a;
+  --color-tone-moss: #a8bfa0;
+  --color-tone-camel: #c7ab7e;
+  --color-tone-mist: #9fb6c4;
+  --color-tone-mauve: #c2a3b5;
+  --color-tone-fern: #9db09a;
+
+  /* Payment providers, bound to data-brand in tokens.css */
+  --color-brand-bca: #1a4b8f;
+  --color-brand-bri: #14508f;
+  --color-brand-mandiri: #0d3b66;
+  --color-brand-bni: #c8892b;
+  --color-brand-gopay: #2f7a5e;
+  --color-brand-ovo: #6b4fa5;
+  --color-brand-dana: #2b7fc8;
+  --color-brand-shopee: #c8542b;
+
+  --color-voucher-recurring: #a65c3f;
+
+  /* Radii */
+  --radius-2: 2px;
+  --radius-6: 6px;
+  --radius-7: 7px;
+  --radius-8: 8px;
+  --radius-9: 9px;
+  --radius-10: 10px;
+  --radius-11: 11px;
+  --radius-12: 12px;
+  --radius-13: 13px;
+  --radius-14: 14px;
+  --radius-15: 15px;
+  --radius-16: 16px;
+  --radius-17: 17px;
+  --radius-18: 18px;
+  --radius-19: 19px;
+  --radius-20: 20px;
+  --radius-22: 22px;
+  --radius-26: 26px;
+  --radius-pill: 99px;
+
+  --radius-half: 50%;
+
+  /* By role */
+  --radius-card: 20px;
+  --radius-card-sm: 18px;
+  --radius-tile: 14px;
+  --radius-chip: 12px;
+  --radius-field: 14px;
+
+  /* Headers rounded at the bottom only */
+  --radius-hero-24: 0 0 24px 24px;
+  --radius-hero-26: 0 0 26px 26px;
+  --radius-hero-28: 0 0 28px 28px;
+  --radius-hero-30: 0 0 30px 30px;
+
+  /* One pixel per step: p-13 is 13px, gap-9 is 9px */
+  --spacing: 1px;
+
+  /* Font sizes by pixel value */
+  --text-9: 9px;
+  --text-9-5: 9.5px;
+  --text-10: 10px;
+  --text-10-5: 10.5px;
+  --text-11: 11px;
+  --text-11-5: 11.5px;
+  --text-12: 12px;
+  --text-12-5: 12.5px;
+  --text-13: 13px;
+  --text-13-5: 13.5px;
+  --text-14: 14px;
+  --text-14-5: 14.5px;
+  --text-15: 15px;
+  --text-15-5: 15.5px;
+  --text-16: 16px;
+  --text-17: 17px;
+  --text-18: 18px;
+  --text-19: 19px;
+  --text-20: 20px;
+  --text-21: 21px;
+  --text-22: 22px;
+  --text-23: 23px;
+  --text-24: 24px;
+  --text-25: 25px;
+  --text-26: 26px;
+  --text-28: 28px;
+  --text-30: 30px;
+  --text-31: 31px;
+  --text-33: 33px;
+  --text-34: 34px;
+  --text-40: 40px;
+  --text-44: 44px;
+  --text-56: 56px;
+
+  /* Safe-area insets and the spacing derived from them */
+  --spacing-safe-top: var(--safe-top);
+
+  --spacing-screen-top: calc(var(--safe-top) + 10px);
+
+  /* Bottom padding of a bar is the larger of the gesture inset and its own top padding, not the sum */
+  --spacing-bar-bottom: max(var(--safe-bottom), 13px);
+
+  --spacing-success-bottom: max(var(--safe-bottom), 24px);
+
+  --spacing-sheet-bottom: max(var(--safe-bottom), 12px);
+  --spacing-safe-bottom: var(--safe-bottom);
+
+  --spacing-tabbar-pad: var(--tabbar-pad);
+  --spacing-tabbar-content: var(--tabbar-content);
+  --spacing-tabbar-bottom: max(var(--safe-bottom), var(--tabbar-pad));
+  --spacing-tabbar: var(--tabbar-h);
+
+  --spacing-tabbar-total: calc(
+    var(--tabbar-border) + var(--tabbar-pad) + var(--tabbar-content) +
+      var(--spacing-tabbar-bottom)
+  );
+
+  --spacing-scrollheader: calc(var(--safe-top) + 61px);
+
+  --spacing-tab-clear: calc(var(--spacing-tabbar-total) + 16px);
+  --spacing-pushed-clear: max(var(--safe-bottom), 16px);
+
+  --spacing-cta-clear: 110px;
+
+  /* Shadows */
+  --shadow-card: 0 6px 18px rgba(40, 30, 15, 0.06);
+  --shadow-card-soft: 0 6px 18px rgba(40, 30, 15, 0.05);
+  --shadow-raise: 0 8px 24px rgba(40, 30, 15, 0.06);
+  --shadow-raise-deep: 0 8px 24px rgba(40, 30, 15, 0.08);
+  --shadow-float: 0 8px 22px rgba(0, 0, 0, 0.14);
+  --shadow-cta: 0 8px 20px rgba(40, 60, 45, 0.18);
+  --shadow-tab: 0 1px 4px rgba(0, 0, 0, 0.12);
+  --shadow-frame: 0 0 40px rgba(40, 30, 15, 0.14);
+
+  --shadow-sticky: 0 -6px 20px rgba(40, 30, 15, 0.06);
+
+  /* Line heights */
+  --leading-tight: 1.15;
+  --leading-heading: 1.2;
+  --leading-snug: 1.25;
+  --leading-normal: 1.45;
+  --leading-relaxed: 1.5;
+  --leading-prose: 1.55;
+  --leading-loose: 1.6;
+
+  /* Letter spacing */
+  --tracking-tighter: -0.3px;
+  --tracking-tight: -0.2px;
+  --tracking-wide: 0.3px;
+  --tracking-wider: 0.4px;
+  --tracking-widest: 0.5px;
+
+  --tracking-loose: 1px;
+
+  /* Fonts */
+  --font-mono: ui-monospace, monospace;
+
+  --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+
+  /* Animations, keyframes in base.css */
+  --animate-spin-slow: spin 1s linear infinite;
+  --animate-pop: pop 0.5s ease both;
+
+  --animate-sheet-up: sheetUp 0.22s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+  --animate-scrim-in: scrimIn 0.22s ease both;
+}
