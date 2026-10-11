@@ -153,7 +153,15 @@ export const marketplaceApi = {
   review: (id: string, body: unknown) =>
     authApi.post(`/api/orders/${id}/review`, body),
 };
+export interface AdminDashboardStats {
+  pendingVerification: number;
+  pendingOrders: number;
+  providers: number;
+  agencies: number;
+}
 export const adminApi = {
+  dashboardStats: () =>
+    authApi.get<AdminDashboardStats>("/api/admin/dashboard/stats"),
   roster: () => authApi.get<ProviderAdmin[]>("/api/admin/providers"),
   provider: (id: string) =>
     authApi.get<ProviderAdmin>(`/api/admin/providers/${id}`),

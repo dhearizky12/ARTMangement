@@ -30,9 +30,9 @@ export function ProtectedRoute({
         to={
           session.user.role === "Provider"
             ? "/provider/dashboard"
-            : session.user.role === "Customer"
-              ? "/"
-              : "/admin"
+: session.user.role === "Customer"
+                ? "/"
+                : "/admin/dashboard"
         }
         replace
       />

@@ -1,22 +1,19 @@
 import { useState, type FormEvent } from "react";
-import { Link, Navigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { Navigate, useSearchParams } from "react-router-dom";
+import { ArrowRight } from "lucide-react";
 import {
   authApi,
   type TwoFactorLoginChallenge,
 } from "../api/authApi";
 import { useAuth } from "../context/AuthContext";
-import { AuthLayout } from "../components/AuthLayout";
+import { Brand } from "../components/Brand";
 import { Badge, Button, Input, PasswordInput, Spinner } from "../components/ui";
+import { useAdminMeta } from "../hooks/useAdminMeta";
+import { adminLoginReturn, isAdminRole } from "../lib/adminPaths";
 export function AdminLoginPage() {
+  useAdminMeta();
   const [params] = useSearchParams();
-  const requested = params.get("returnTo") || "/";
-  const returnTo =
-    /^\/(?![\/\\])/.test(requested) &&
-    !requested.startsWith("/login") &&
-    !requested.startsWith("/admin")
-      ? requested
-      : "/";
+  const requested = params.get("returnTo");
   const { session, loading } = useAuth();
   const [challenge, setChallenge] = useState<TwoFactorLoginChallenge | null>(
     null,
@@ -25,12 +22,9 @@ export function AdminLoginPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [resending, setResending] = useState(false);
-  if (session)
+  if (session && isAdminRole(session.user.role))
     return (
-      <Navigate
-        to={session.user.role !== "Customer" ? "/admin" : returnTo}
-        replace
-      />
+      <Navigate to={adminLoginReturn(requested, session.user.role)} replace />
     );
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -76,8 +70,9 @@ export function AdminLoginPage() {
     }
   }
   return (
-    <AuthLayout>
+    <main className="admin-auth">
       <div className="form-card">
+        <Brand to="/admin/dashboard" />
         <Badge tone="accent">AREA ADMINISTRATOR</Badge>
         {!challenge ? (
           <>
@@ -178,11 +173,7 @@ export function AdminLoginPage() {
             </div>
           </>
         )}
-        <Link className="text-link" to="/login">
-          <ArrowLeft aria-hidden="true" />
-          Kembali ke login pengguna
-        </Link>
       </div>
-    </AuthLayout>
+    </main>
   );
 }

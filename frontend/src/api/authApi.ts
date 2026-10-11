@@ -299,7 +299,13 @@ export class AuthApi {
     } catch (e) {
       if (!(e instanceof ApiError) || e.status !== 401) throw e;
       const updated = await this.refresh();
-      return this.request<T>(path, body, updated.accessToken, method);
+      try {
+        return await this.request<T>(path, body, updated.accessToken, method);
+      } catch (e2) {
+        if (e2 instanceof ApiError && e2.status === 401)
+          this.setSession(null);
+        throw e2;
+      }
     }
   }
 }

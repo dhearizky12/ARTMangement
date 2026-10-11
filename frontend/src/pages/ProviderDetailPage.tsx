@@ -218,11 +218,7 @@ export function ProviderDetailPage() {
               >
                 Pesan layanan
               </Button>
-            ) : (
-              <Link className="btn btn-secondary" to="/admin">
-                Kelola di admin
-              </Link>
-            )}
+            ) : null}
           </div>
         </>
       )}

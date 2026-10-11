@@ -31,10 +31,6 @@ export function AccountPage() {
                 <Link className="text-link" to="/provider/dashboard">
                   Buka panel Provider
                 </Link>
-              ) : session.user.role !== "Customer" ? (
-                <Link className="text-link" to="/admin">
-                  Buka ruang kelola
-                </Link>
               ) : null}
               {error && <p role="alert">{error}</p>}
             </div>
@@ -62,9 +58,6 @@ export function AccountPage() {
                 Daftar sebagai penyedia jasa
               </Link>
             </div>
-            <p className="admin-link">
-              <Link to="/admin/login">Login admin</Link>
-            </p>
           </>
         )}
       </Card>

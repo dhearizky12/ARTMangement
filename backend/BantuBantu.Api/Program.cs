@@ -109,7 +109,8 @@ builder.Services.AddScoped<AgencyService>();
 builder.Services.AddScoped<CatalogService>();
 builder.Services.AddScoped<ReviewService>();
 builder.Services.AddScoped<OrderService>();
-builder.Services.AddDbContext<AppDbContext>((serviceProvider, o) => o.UseNpgsql(databaseConnection, npgsql =>
+builder.Services.AddScoped<AdminDashboardService>();
+builder.Services.AddDbContext<AppDbContext>(o => o.UseNpgsql(databaseConnection, npgsql =>
     npgsql.EnableRetryOnFailure(
         maxRetryCount: 3,
         maxRetryDelay: TimeSpan.FromSeconds(5),

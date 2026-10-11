@@ -88,7 +88,7 @@ export function ProviderWizardPage() {
   const result = useResource(() => adminApi.provider(id!), id!);
   return (
     <AdminLayout>
-      <Link className="text-link" to="/admin">
+      <Link className="text-link" to="/admin/dashboard">
         ← Kembali ke roster
       </Link>
       <h1>{result.data?.provider.fullName || "Daftarkan penyedia"}</h1>
