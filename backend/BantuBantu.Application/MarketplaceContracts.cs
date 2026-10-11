@@ -32,6 +32,10 @@ public record ProviderPage(int Total, int Page, int PageSize, ProviderDto[] Item
 public record OrderDto(Guid Id, Guid ProviderId, string ProviderName, OrderStatus Status, DateOnly ScheduledDate, decimal Price, PricingType PricingType, string AddressDetail, string VillageId, bool Reviewed);
 public record ProviderModerationRequest([StringLength(1000)] string? Note);
 public record AdminDashboardStats(int PendingVerification, int PendingOrders, int Providers, int Agencies);
+// Narrow read model for booking validation: only the fields OrderService.Book
+// needs, so the full provider graph (collections, agency, village chain) is not
+// loaded just to check availability and price.
+public record BookingProvider(Guid Id, string FullName, decimal Price, PricingType PricingType, DayOfWeek[] AvailableDays);
 public interface IMarketplaceRepository
 {
     Task<(int Total, List<ProviderDto> Items)> BrowseAsync(string? q, Guid? category, string? villageId, int page, int pageSize, CancellationToken ct);
