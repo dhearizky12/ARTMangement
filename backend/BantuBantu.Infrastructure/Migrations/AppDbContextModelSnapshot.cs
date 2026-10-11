@@ -439,6 +439,8 @@ namespace BantuBantu.Infrastructure.Migrations
 
                     b.HasIndex("VillageId");
 
+                    b.HasIndex("ApplicationStatus", "VerificationStatus");
+
                     b.ToTable("Providers");
                 });
 

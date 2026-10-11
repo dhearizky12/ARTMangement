@@ -40,6 +40,7 @@ x-api: &api
     TwoFactor__MaxSkipsPerHour: ${TWO_FACTOR_MAX_SKIPS_PER_HOUR:-3}
     App__FrontendBaseUrl: ${APP_FRONTEND_BASE_URL:-}
     Email__ReplyTo: ${EMAIL_REPLY_TO:-}
+    Diagnostics__ServerTiming: ${DIAGNOSTICS_SERVER_TIMING:-false}
     Notifications__Enabled: ${NOTIFICATIONS_ENABLED:-false}
     Notifications__OutboxPollSeconds: ${NOTIFICATIONS_OUTBOX_POLL_SECONDS:-30}
     Notifications__MaxAttempts: ${NOTIFICATIONS_MAX_ATTEMPTS:-6}
