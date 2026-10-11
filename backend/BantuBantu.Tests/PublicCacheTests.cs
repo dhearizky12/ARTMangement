@@ -53,6 +53,19 @@ public class PublicCacheTests
     }
 
     [Fact]
+    public async Task AuthenticatedRead_IsNeverMarkedPublicCacheable()
+    {
+        using var factory = await ReadyAsync();
+        using var client = factory.CreateClient();
+        var request = new HttpRequestMessage(HttpMethod.Get, "/api/providers?pageSize=50");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "token");
+        var response = await client.SendAsync(request);
+
+        Assert.Null(response.Headers.CacheControl);
+        Assert.Null(response.Headers.ETag);
+    }
+
+    [Fact]
     public async Task PublicCatalogRead_IsCompressedWhenAccepted()
     {
         using var factory = await ReadyAsync();

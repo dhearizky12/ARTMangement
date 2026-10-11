@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using Microsoft.Net.Http.Headers;
 namespace BantuBantu.Api;
 
 // Adds shared-cache headers and a weak ETag to anonymous, cacheable catalog
@@ -11,7 +12,7 @@ public sealed class PublicCacheMiddleware(RequestDelegate next)
 
     public async Task InvokeAsync(HttpContext context)
     {
-        if (!HttpMethods.IsGet(context.Request.Method) || !IsCacheable(context.Request.Path))
+        if (!HttpMethods.IsGet(context.Request.Method) || !IsCacheable(context.Request.Path) || context.Request.Headers.ContainsKey(HeaderNames.Authorization))
         {
             await next(context);
             return;
