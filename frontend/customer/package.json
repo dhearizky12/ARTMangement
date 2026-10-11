@@ -6,14 +6,17 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:all": "node tooling/buildAll.mjs",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "agents": "ls agents"
   },
   "dependencies": {
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.28.0"
+    "react-router-dom": "^6.28.0",
+    "sharp": "^0.35.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
